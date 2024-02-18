@@ -1,0 +1,13 @@
+{
+    "model_save_path":"\\..\\",
+    "motor_model":"j3.mot", 
+    "gain_setting":"j3_gain.gain",
+    "physical_unit":"rad",
+    "internal_unit":"pulse",
+    "PPR":131072,
+    "gear_ratio":-80,
+    "sampling_time":0.001,
+    "rated_torque":{
+		    "unit":"N-m", "value":0.636
+	  }
+}

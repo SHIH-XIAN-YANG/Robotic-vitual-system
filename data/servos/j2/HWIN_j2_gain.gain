@@ -1,0 +1,51 @@
+{
+	"position_loop": {
+		"KP": {
+			"unit": "1/second", "value": 45
+		},
+		"KI": {
+			"unit": "0.1-ms", "value": 0.0
+		}, 
+		"KD": {
+			"unit": "0.1-ms", "value": 0.0
+		},
+		"vel_Cmd_limitation": {
+			"unit": "min^-1(rpm)", "value": 3000
+		}
+	}, 
+	"velocity_loop": {
+		"KP": {
+			"unit": "Hz", "value": 130
+		},
+		"KI": {
+			"unit": "0.1-ms", "value": 20
+		}, 
+		"KD": {
+			"unit": "0.1-ms", "value": 0
+		},
+		"tor_Cmd_limitation": {
+			"unit": "0.1-%", "value": 5000
+		}
+	}, 
+
+	"position_loop": {
+		"filter_type": "exponential",   
+		"time_constant": {
+			"unit": "sec", "value": 1
+		}
+	},
+	"velocity_loop": {
+		"filter_type": "fir", 
+		"order": 30,  
+		"Cutoff_frequency": {
+			"unit": "Hz", "value": 4000
+		}
+	},
+	"current_loop": {
+		"filter_type": "fir", 
+		"order": 30,  
+		"Cutoff_frequency": {
+			"unit": "Hz", "value": 600
+		}
+	}
+}

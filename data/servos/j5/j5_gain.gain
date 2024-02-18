@@ -1,0 +1,43 @@
+{
+	"position_loop": {
+		"KP": {
+			"unit": "1/second", "value": 10.9498
+		},
+		"KI": {
+			"unit": "0.1-ms", "value": 0.0
+		}, 
+		"KD": {
+			"unit": "0.1-ms", "value": 0.0
+		},
+		"vel_Cmd_limitation": {
+			"unit": "0.1-ms", "value": 3.4028235e+37
+		},
+		"filter": {
+			"filter_type": "exponential_decay", 
+			"Time_constant": {
+				"unit": "s", "value": 1
+			}
+		}
+	}, 
+	"velocity_loop": {
+		"KP": {
+			"unit": "Hz", "value":  1.8284953974644
+		},
+		"KI": {
+			"unit": "0.1-ms", "value": 1.862383720105
+		}, 
+		"KD": {
+			"unit": "0.1-ms", "value": 0
+		},
+		"tor_Cmd_limitation": {
+			"unit": "0.1-ms", "value": 3.4028235e+37
+		}
+	}, 
+	"current_loop": {
+		"filter_type": "fir", 
+		"order": 30,  
+		"Cutoff_frequency": {
+			"unit": "Hz", "value": 20
+		}
+	}
+}

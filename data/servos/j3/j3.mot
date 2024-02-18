@@ -1,0 +1,45 @@
+{	"manufacturer": "Sanyo_Denkei", 
+	"model": "SAMMOTION_RS2", 
+	"power_supply":{
+		"type": "AC", 
+		"phase": 3, 
+		"rated_power": {
+			"unit": "W", "value": 200
+		}, 
+		"rated_voltage": {
+			"unit": "m^2", "value": 0.2
+		}, 
+		"rated_current": {
+			"unit": "m^2", "value": 0.2
+		}
+	}, 
+	"ts": {
+		"unit": "second", "value": 0.001
+	}, 
+	"kt": {
+		"unit": "m^2", "value": 0.476000000000000
+	}, 
+	"kb": {
+		"unit": "m^2", "value": 0.158518323319528
+	}, 
+	"Ra": {
+		"unit": "m^2", "value": 2.70000000000000
+	}, 
+	"La": {
+		"unit": "m^2", "value": 0.007100000000000
+	}, 	
+	"Jm": {
+		"unit": "m^2", "value": 0.716992000000000
+	}, 
+	"friction": {
+		"viscosity": {
+			"unit": "m^2", "value": 10.962587304012093
+		}, 
+		"Coulomb": {
+			"unit": "m^2", "value": 0.0
+		}, 
+		"velocity_power": {
+			"unit": "m^2", "value": 0.0
+		}
+	}
+}
