@@ -190,9 +190,9 @@ for i, q_ref in enumerate(zip(q1_c,q2_c,q3_c,q4_c,q5_c,q6_c)):
     
 
 ### System log ###
-np.savetxt(log_path+'pos_error.txt',q_pos_err,delimiter=',',header='Joint1, Joint2, Joint3, Joint4, Joint5, Joint6', fmt='%10f')
-np.savetxt(log_path+'pos.txt',q,delimiter=',',header='Joint1, Joint2, Joint3, Joint4, Joint5, Joint6', fmt='%10f')
-np.savetxt(log_path+'tor.txt',torque,delimiter=',',header='Joint1, Joint2, Joint3, Joint4, Joint5, Joint6', fmt='%10f')
+# np.savetxt(log_path+'pos_error.txt',q_pos_err,delimiter=',',header='Joint1, Joint2, Joint3, Joint4, Joint5, Joint6', fmt='%10f')
+# np.savetxt(log_path+'pos.txt',q,delimiter=',',header='Joint1, Joint2, Joint3, Joint4, Joint5, Joint6', fmt='%10f')
+# np.savetxt(log_path+'tor.txt',torque,delimiter=',',header='Joint1, Joint2, Joint3, Joint4, Joint5, Joint6', fmt='%10f')
 
 #%%
 ### plot frequency response of motor system

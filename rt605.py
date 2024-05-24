@@ -37,14 +37,11 @@ import json
 
 
 class RT605():
-    def __init__(self,ts=0.001) -> None:
+    def __init__(self,ts=0.0005) -> None:
         self.data = None
         self.ts = ts
         self.time = None
 
-        # self.x_c = None
-        # self.y_c = None
-        # self.z_c = None
         self.q_c = None
 
         self.q1_c = None
@@ -109,7 +106,7 @@ class RT605():
 
         
 
-    def load_HRSS_trajectory(self,path_dir:str()):
+    def load_HRSS_trajectory(self,path_dir:str):
         try:
             # self.data = np.genfromtxt(self.path_file_dir+self.path_name, delimiter=',')
             self.data = np.genfromtxt(path_dir, delimiter=',')
@@ -178,7 +175,7 @@ class RT605():
         return self.q_c
 
 
-    def setPID(self, id, gain=str(), value=np.float32()):
+    def setPID(self, id, gain=str(), value=np.float32):
         if gain == "kvp":
             self.joints[id].setPID(ServoGain.Velocity.value.kp, value)
         elif gain =="kvi":
@@ -287,54 +284,7 @@ class RT605():
             #                         (self.q1_c[i],self.q2_c[i],self.q3_c[i],
             #                             self.q4_c[i],self.q5_c[i],self.q6_c[i]))
     
-    def pso_tune_gain_update(self):
-        """
-            this function is seted up temperary for tuning PID gain using PSO algorithm
-        """
-        g_tor = np.zeros(6,dtype=np.float32)
-        fric_tor = np.zeros(6,dtype=np.float32)
-
-        contour_err_sum = 0
-        err = 0
-
-        for i, q_ref in enumerate(zip(self.q1_c,self.q2_c,self.q3_c,self.q4_c,self.q5_c,self.q6_c)):
-            # print(q_ref)
-            for idx in range(6):
-                pos,vel,acc,tor,pos_err, vel_cmd = self.joints[idx](q_ref[idx],g_tor[idx])
-                self.q[i][idx] = pos 
-                self.dq[i][idx] = vel 
-                self.ddq[i][idx] = acc 
-                self.q_pos_err[i][idx] = pos_err
-                self.torque[i][idx] = tor
-            # print(self.q[i])
-
-            g_tor = self.compute_GTorque(self.q[i][1],self.q[i][2],self.q[i][3],
-                                            self.q[i][4],self.q[i][5])
-            
-            fric_tor = self.compute_friction(self.q[i][0],self.q[i][1],self.q[i][2],
-                                            self.q[i][3],self.q[i][4],self.q[i][5]) #TODO
-
-            self.x[i],self.y[i],self.z[i],self.pitch[i],self.roll[i],self.yaw[i] = self.forward_kinematic(
-                                    (self.q[i,0],self.q[i,1],self.q[i,2],
-                                        self.q[i,3],self.q[i,4],self.q[i,5]))
-            
-            # self.tracking_err_x.append(self.x[i]-self.x_c[i])
-            # self.tracking_err_y.append(self.y[i]-self.y_c[i])
-            # self.tracking_err_z.append(self.z[i]-self.z_c[i])
-            # self.tracking_err_pitch.append(self.pitch[i]-self.pitch_c[i])
-            # self.tracking_err_roll.append(self.roll[i]-self.roll_c[i])
-            # self.tracking_err_yaw.append(self.yaw[i]-self.yaw_c[i])
-            # self.tracking_err.append(LA.norm([self.tracking_err_x, self.tracking_err_y, self.tracking_err_z]))
-            # self.contour_err.append(self.computeCountourErr(self.x[i],self.y[i],self.z[i]))
-            c_err = self.computeCountourErr(self.x[i],self.y[i],self.z[i])
-            contour_err_sum  = contour_err_sum + c_err**2
-            # print( self.computeCountourErr(self.x[i],self.y[i],self.z[i]))
-            err = err + ((self.x_c[i]-self.x[i]) + (self.y_c[i]-self.y[i]) + (self.z_c[i]-self.z[i]))**2
-        # print(contour_err_sum)
-        
-        return contour_err_sum
-    
-    def __call__(self,q_ref:np.ndarray) -> Any:
+    def __call__(self,q_ref:np.ndarray):
         if not isinstance(q_ref,np.ndarray):
             raise TypeError("Input datamust be a Numpy array with size")
         if q_ref.shape != (6,):
@@ -364,9 +314,7 @@ class RT605():
         
         return x,y,z,pitch,roll,yaw
 
-    # TODO: write a database class
-
-    def save_log(self,save_dir=None):
+    def save_log(self,save_dir:str=None):
         # self.log_path = save_dir + '/log/'
 
         # if not os.path.exists(self.log_path):
@@ -437,28 +385,58 @@ class RT605():
                                  tracking_err_x_json, tracking_err_y_json, tracking_err_z_json
                                  ,fig_path))
             connection.commit()
-
-            # sql = "INSERT INTO bw_mismatch_data (Gain) VALUES (%s)"
-            # cursor.execute(sql, (gain_json,))
-            # sql = "INSERT INTO bw_mismatch_data (Bandwidth) VALUES (%s)"
-            # cursor.execute(sql, (bandwidth_json,))
-            # sql = "INSERT INTO bw_mismatch_data (max_bandwidth) VALUES (%s)"
-            # cursor.execute(sql, (max_bandwidth,))
-            # sql = "INSERT INTO bw_mismatch_data (contour_err) VALUES (%s)"
-            # cursor.execute(sql, (contour_error_json,))
-            # sql = "INSERT INTO bw_mismatch_data (tracking_err_x) VALUES (%s)"
-            # cursor.execute(sql, (tracking_err_x_json,))
-            # sql = "INSERT INTO bw_mismatch_data (tracking_err_y) VALUES (%s)"
-            # cursor.execute(sql, (tracking_err_y_json,))
-            # sql = "INSERT INTO bw_mismatch_data (tracking_err_z) VALUES (%s)"
-            # cursor.execute(sql, (tracking_err_z_json,))
-
             
         except Exception as ex:
             print(ex)
         # np.savetxt(self.log_path+'joint_vel.txt', self.dq,delimiter=',',header='Joint1, Joint2, Joint3, Joint4, Joint5, Joint6', fmt='%10f')
         # np.savetxt(self.log_path+'joint_acc.txt', self.ddq,delimiter=',',header='Joint1, Joint2, Joint3, Joint4, Joint5, Joint6', fmt='%10f')    
 
+    def pso_tune_gain_update(self):
+        """
+            this function is seted up temperary for tuning PID gain using PSO algorithm
+        """
+        g_tor = np.zeros(6,dtype=np.float32)
+        fric_tor = np.zeros(6,dtype=np.float32)
+
+        contour_err_sum = 0
+        err = 0
+
+        for i, q_ref in enumerate(zip(self.q1_c,self.q2_c,self.q3_c,self.q4_c,self.q5_c,self.q6_c)):
+            # print(q_ref)
+            for idx in range(6):
+                pos,vel,acc,tor,pos_err, vel_cmd = self.joints[idx](q_ref[idx],g_tor[idx])
+                self.q[i][idx] = pos 
+                self.dq[i][idx] = vel 
+                self.ddq[i][idx] = acc 
+                self.q_pos_err[i][idx] = pos_err
+                self.torque[i][idx] = tor
+            # print(self.q[i])
+
+            g_tor = self.compute_GTorque(self.q[i][1],self.q[i][2],self.q[i][3],
+                                            self.q[i][4],self.q[i][5])
+            
+            fric_tor = self.compute_friction(self.q[i][0],self.q[i][1],self.q[i][2],
+                                            self.q[i][3],self.q[i][4],self.q[i][5]) #TODO
+
+            self.x[i],self.y[i],self.z[i],self.pitch[i],self.roll[i],self.yaw[i] = self.forward_kinematic(
+                                    (self.q[i,0],self.q[i,1],self.q[i,2],
+                                        self.q[i,3],self.q[i,4],self.q[i,5]))
+            
+            # self.tracking_err_x.append(self.x[i]-self.x_c[i])
+            # self.tracking_err_y.append(self.y[i]-self.y_c[i])
+            # self.tracking_err_z.append(self.z[i]-self.z_c[i])
+            # self.tracking_err_pitch.append(self.pitch[i]-self.pitch_c[i])
+            # self.tracking_err_roll.append(self.roll[i]-self.roll_c[i])
+            # self.tracking_err_yaw.append(self.yaw[i]-self.yaw_c[i])
+            # self.tracking_err.append(LA.norm([self.tracking_err_x, self.tracking_err_y, self.tracking_err_z]))
+            # self.contour_err.append(self.computeCountourErr(self.x[i],self.y[i],self.z[i]))
+            c_err = self.computeCountourErr(self.x[i],self.y[i],self.z[i])
+            contour_err_sum  = contour_err_sum + c_err**2
+            # print( self.computeCountourErr(self.x[i],self.y[i],self.z[i]))
+            err = err + ((self.x_c[i]-self.x[i]) + (self.y_c[i]-self.y[i]) + (self.z_c[i]-self.z[i]))**2
+        # print(contour_err_sum)
+        
+        return contour_err_sum
 
 
     def plot_joint(self, show=True):
@@ -707,7 +685,7 @@ class RT605():
         return t_err, t_err_x, t_err_y, t_err_z, t_err_psi, t_err_phi, t_err_theta
 
     
-    def freq_response(self, fs=1000,f0=0.1,f1=50,t0=0,t1=1,a0=0.5,a1=0.001, show=True):
+    def freq_response(self, fs=2000,f0=0.1,f1=50,t0=0,t1=1,a0=0.5,a1=0.001, show=True):
         '''
         determine the frequency response of system:
         fs: sampling rate

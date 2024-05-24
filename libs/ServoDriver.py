@@ -157,10 +157,11 @@ class JointServoDrive:
             #           
     #
     def setInitial(self, pos_init:np.float32=0.0, vel_init:np.float32=0.0, acc_init:np.float32=0.0, tor_init:np.float32=0.0):
-        self.__pos = pos_init
-        self.__vel = vel_init
-        self.__acc = acc_init
-        self.__tor = tor_init
+        self.__pos = self.reducer(pos_init,inverse=True)
+        self.__vel = self.reducer(vel_init,inverse=True)
+        self.__acc = self.reducer(acc_init,inverse=True)
+        self.__tor = self.reducer(tor_init,inverse=True)
+        
         self.__pos_internal = self.pos_unit_to_internal(pos_init)
         self.__vel_internal = self.vel_unit_to_internal(vel_init)
         self.__acc_internal = self.acc_unit_to_internal(acc_init)
@@ -210,6 +211,7 @@ class JointServoDrive:
          xr: input
          tor_n: nonlinear coupling effect
         '''
+        xr = self.reducer(xr, inverse=True)
         xr_internal = self.xr_unit_to_internal(x=xr)
         # --------------- Position Loop: ---------------
         self.pos_err_internal = self.pos_node(xr_internal, -1.0*self.__pos_internal)
@@ -269,10 +271,13 @@ class JointServoDrive:
         q   = self.reducer(self.__pos)
         dq  = self.reducer(self.__vel)
         ddq = self.reducer(self.__acc)
+
+        pos_err = self.pos_unit_to_internal(self.pos_err_internal, inverse=True)
         
+        vel_cmd = self.vel_unit_to_internal(self.vel_cmd_internal, inverse=True)
         
         # print(f'{self.__joint_ID}: {self.__pos}')
-        return self.__pos, dq, ddq, self.__tor, self.pos_unit_to_internal(self.pos_err_internal, inverse=True), self.vel_unit_to_internal(self.vel_cmd_internal, inverse=True)
+        return q, dq, ddq, self.__tor, pos_err, vel_cmd
     #
     
     def export_servo_gain(self,gain_settin_file_name:str):
