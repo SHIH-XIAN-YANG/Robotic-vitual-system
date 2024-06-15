@@ -1,6 +1,7 @@
 # RT605 robot_virtual_system
 
-
+## Folder "rt605_experiments"
+此資料夾為實際機械手臂 RT605-710 的相關實驗之 MATLAB, python 與資料等。
 
 ## Introduction
 
@@ -22,14 +23,20 @@ This command tells Conda to create a new environment based on the specifications
 - create rail_marking conda environment
 
 ```bash
-conda env create -f requirement.yml
-conda activate rt605_simulation_env
+conda env create -f environment.yml
+conda activate rt605_env
 ```
 
 - activate conda environment
 
 ```bash
-conda activate rt605_simulation_env
+conda activate rt605_env
+```
+
+- (optional):create environ with PIP
+
+```bash
+pip -r install requirements.txt
 ```
 
 

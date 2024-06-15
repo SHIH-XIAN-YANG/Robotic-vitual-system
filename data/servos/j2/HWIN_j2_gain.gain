@@ -11,6 +11,12 @@
 		},
 		"vel_Cmd_limitation": {
 			"unit": "min^-1(rpm)", "value": 3000
+		},
+		"vel_Cmd_filter":{
+			"filter_type": "exponential_delay",   
+			"time_constant": {
+				"unit": "sec", "value": 1
+			}
 		}
 	}, 
 	"velocity_loop": {
@@ -25,22 +31,16 @@
 		},
 		"tor_Cmd_limitation": {
 			"unit": "0.1-%", "value": 5000
+		},
+		"tor_Cmd_filter": {
+			"filter_type": "fir", 
+			"order": 30,  
+			"Cutoff_frequency": {
+				"unit": "Hz", "value": 4000
+			}
 		}
 	}, 
 
-	"position_loop": {
-		"filter_type": "exponential",   
-		"time_constant": {
-			"unit": "sec", "value": 1
-		}
-	},
-	"velocity_loop": {
-		"filter_type": "fir", 
-		"order": 30,  
-		"Cutoff_frequency": {
-			"unit": "Hz", "value": 4000
-		}
-	},
 	"current_loop": {
 		"filter_type": "fir", 
 		"order": 30,  

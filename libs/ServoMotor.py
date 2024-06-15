@@ -119,7 +119,7 @@ class ServoMotor:
             self.theta += (t2 + self.D_theta)*self.ts/2
         elif ctrl_mode == "torque":
             self.torque = u
-            self.DD_theta = (self.torque - self.fric_vis*self.D_theta)/self.Jm
+            self.DD_theta = (self.torque - self.fric_vis*self.D_theta)/self.Jm # u = Jsy+by
             self.D_theta += (t1 + self.DD_theta)*self.ts/2
             self.theta += (t2 + self.D_theta)*self.ts/2
         

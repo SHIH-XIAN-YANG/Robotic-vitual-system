@@ -39,6 +39,7 @@ class MotorModel(Enum):
 class FilterType(Enum):
     iir = 1
     fir = 2
+    exponential_delay = 3
 #
 class PidType(Enum):
     P           = 0b0001

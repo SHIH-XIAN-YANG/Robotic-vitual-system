@@ -62,39 +62,53 @@ class Reducer(Ratio): #減速比
     def __init__(self, id:int=0):
         super().__init__(id=id)
     
+    
 #
 FIR_LOWPASS:int = 0
 IIR_LOWPASS:int = 1
 
-class ExponentialDecay(ForwardLoop1D):
+class Exponential_delay(ForwardLoop1D):
     time_const:np.float32 = None
     unit:str = None
+    __k:np.float32 = None # filter gain
 
-    def __init__(self, id: int):
+
+    def __init__(self, id: int,k=1, tau=1):
         self.setID(id)
+        self.__k = k
+
 
     def setup(self, tc:np.float32):
         self.time_const = tc
 
-    def __call__(self, x: np.float32):
-        # return x*(1-np.exp(-1*self.time_const))
-        return x
+    def __call__(self, x: np.float32,t:np.float32):
+        y = self.__k*(1-np.exp(-1*t/self.time_const))
+        return y
+        
 
 class LowPassFilter1D(ForwardLoop1D):
     __type:int = None
     __order:np.uint32 = None
     __fc:np.float32 = None
     unit:str = None
+    __coefficients = None
 
     #
     def __init__(self, id:int):
         self.setID(id)
-        self.ts = np.float32() # sampling time (unit: second)
-        self.zeros = []
-        self.poles = []
-        self.x_buf = []
-        self.y_buf2 = []
+        # self.ts = np.float32() # sampling time (unit: second)
+        # self.zeros = []
+        # self.poles = []
+        # self.x_buf = []
+        # self.y_buf2 = []
     #
+    def calculate_coefficients(self):
+        # Calculate filter coefficients using window method (Hamming window)
+        coefficients = np.sinc(2 * self.__fc * (np.arange(self.__order) - (self.__order - 1) / 2))
+        coefficients *= np.hamming(self.__order)
+        coefficients /= np.sum(coefficients)
+        return coefficients
+    
     def Setup(self, type:int, order:int, fc:np.float32):
         '''
         [I/P]:
@@ -103,6 +117,10 @@ class LowPassFilter1D(ForwardLoop1D):
         self.__type = type
         self.__order = order
         self.__fc = fc
+
+        self.x_buf = np.zeros(self.__order)
+        self.__coefficients = self.calculate_coefficients()
+    
     
     def get_fc(self):
         return self.__fc
@@ -119,9 +137,10 @@ class LowPassFilter1D(ForwardLoop1D):
     def __call__(self, x:np.float32):
         y:np.float32 = 0.0
 
-        # TODO
-        # 暫時還沒有效用
-        return x
+        self.x_buf = np.roll(self.x_buf, 1)
+        self.x_buf[0] = x
+        y = np.sum(self.x_buf * self.__coefficients)
+        return y
 #
 PARRALLEL_PID:bool = False
 SERIAL_PID:bool    = True
@@ -238,7 +257,7 @@ class Differentiation(ForwardLoop1D):
         self.ts = ts
         self.x_k_1 = x_k_1
     #
-    def Reset(self):
+    def reset(self):
         self.x_k_1 = 0.0
         self.__first_step = False
     #
