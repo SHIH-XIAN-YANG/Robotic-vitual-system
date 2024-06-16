@@ -12,7 +12,6 @@ from libs.ForwardKinematic import FowardKinematic
 from libs.rt605_Gtorq_model import RT605_GTorq_Model
 import json
 import time
-import threading
 import csv
 from scipy.fft import fft, fftfreq, ifft
 
@@ -89,26 +88,7 @@ for i in range(6):
     joints[i] = ServoDriver.JointServoDrive(id=i,saved_model=model_path+model_path_name)
     joints[i].setInitial()
 
-# motor1 = ServoDriver.JointServoDrive(id=0,saved_model=model_path+'j1/j1.sdrv')
-# motor2 = ServoDriver.JointServoDrive(id=0,saved_model=model_path+'j2/j2.sdrv')
-# motor3 = ServoDriver.JointServoDrive(id=0,saved_model=model_path+'j3/j3.sdrv')
-# motor4 = ServoDriver.JointServoDrive(id=0,saved_model=model_path+'j4/j4.sdrv')
-# motor5 = ServoDriver.JointServoDrive(id=0,saved_model=model_path+'j5/j5.sdrv')
-# motor6 = ServoDriver.JointServoDrive(id=0,saved_model=model_path+'j6/j6.sdrv')
 
-#%%
-# motor1.setInitial(pos_init=q1_c[0],pos_internal_init=q1_c[0])
-# motor2.setInitial(pos_init=q2_c[0],pos_internal_init=q2_c[0])
-# motor3.setInitial(pos_init=q3_c[0],pos_internal_init=q3_c[0])
-# motor4.setInitial(pos_init=q4_c[0],pos_internal_init=q4_c[0])
-# motor5.setInitial(pos_init=q5_c[0],pos_internal_init=q5_c[0])
-# motor6.setInitial(pos_init=q6_c[0],pos_internal_init=q6_c[0])
-# motor1.setInitial()
-# motor2.setInitial()
-# motor3.setInitial()
-# motor4.setInitial()
-# motor5.setInitial()
-# motor6.setInitial()
 
 
 forward_kinematic = FowardKinematic(unit='degree')
