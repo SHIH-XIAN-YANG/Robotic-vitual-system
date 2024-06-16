@@ -5,10 +5,13 @@ import math
 
 
 class FowardKinematic():
-    def __init__(self,unit:str,offset=[0,0,120]) -> None:
+    def __init__(self,unit:str,offset=[0,0,0]) -> None:
         self.unit = unit
         self.offset = offset
         
+        
+    def setOffset(self, offset:list[int]) -> None:
+        self.offset = offset
         
     def __call__(self, joint:np.array):
 
@@ -81,9 +84,15 @@ class FowardKinematic():
             if ori[i]== -180:
                 ori[i]+=360
 
-        pitch = ori[0]
-        roll = ori[1]
-        yaw = ori[3]
+        # return ori= [_ , yaw, pitch, roll]
+        if self.unit=='rad':
+            pitch = np.deg2rad(ori[2])
+            roll = np.deg2rad(ori[1])
+            yaw = np.deg2rad(ori[3])
+        else:
+            pitch = ori[2]
+            roll = ori[1]
+            yaw = ori[3]
 
 
         v2 =  np.cos(self.q1) 

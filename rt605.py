@@ -15,13 +15,14 @@ from libs import ServoDriver
 from libs.ForwardKinematic import FowardKinematic
 from libs.rt605_Gtorq_model import RT605_GTorq_Model
 from libs.rt605_Friction_model import RT605_Friction_Model
-from libs.bode_plot import Freq_Response
 
 import json
 import time
 import threading
 import csv
 from scipy.fft import fft, fftfreq, ifft
+from scipy.signal import freqz
+import statistics
 
 ### plot library
 import matplotlib.pyplot as plt
@@ -31,7 +32,6 @@ from mpl_toolkits.mplot3d import axes3d
 from mpl_toolkits.basemap import Basemap
 
 ### Data base ###
-import pymysql
 import json
 
 
@@ -41,6 +41,7 @@ class RT605():
         self.data = None
         self.ts = ts
         self.time = None
+
 
         self.q_c = None
 
@@ -69,6 +70,10 @@ class RT605():
         self.yaw = None
 
         self.contour_err = []
+        self.circular_err = []
+        self.ori_contour_err = []
+        self.phase = []
+        self.phase_delay = []
         self.tracking_err = []
         self.tracking_err_x = []
         self.tracking_err_y = []
@@ -81,32 +86,40 @@ class RT605():
 
         self.arr_size = None 
 
-
-        self.thread_list = []
-
         self.path_mode = None # determine if it is XY(0)/YZ(1) circle or line(2)
 
         self.joints:ServoDriver.JointServoDrive = [None]*6 # Empty list to hold six joint instance
 
-  
         self.forward_kinematic = FowardKinematic(unit='degree')
 
         self.compute_GTorque = RT605_GTorq_Model()
         self.compute_friction = RT605_Friction_Model()
-        
-        self.motor_freq_response = Freq_Response()
-
-        self.model_path = './data/servos/'
-        self.log_path = './run/'
+        # self.motor_freq_response = Freq_Response()
+ 
+        self.model_path = os.path.dirname(os.path.abspath(__file__)) + '/data/servos/'
+        self.log_path = os.path.dirname(os.path.abspath(__file__)) + '/run/'
         #self.path_file_dir = './data/Path/'
         #self.path_name = 'XY_circle_path.txt'
+
+        # circular test
+        self.x_center = 0
+        self.y_center = 0
+        self.z_center = 0
+
+        self.initialize_model()
         
-        self.progress = 0 #for fun 
+    def setPosition(self, q:list):
+        '''
+        q: 【degree】
+        '''
+        for i in range(6):
+            self.joints[i].setInitial(pos_init=q[i])
 
-
+        # Servo joint and motor initialization
+        self.initialize_model()
         
 
-    def load_HRSS_trajectory(self,path_dir:str):
+    def load_HRSS_trajectory(self,path_dir:str,prolong:bool=True):
         try:
             # self.data = np.genfromtxt(self.path_file_dir+self.path_name, delimiter=',')
             self.data = np.genfromtxt(path_dir, delimiter=',')
@@ -120,26 +133,27 @@ class RT605():
             self.path_mode = 1
         elif path_dir.find("line") != -1:
             self.path_mode = 2
+        elif path_dir.find("sine") !=-1:
+            self.path_mode = 3
         
+        expand = int(len(self.data[:,0])*1.2)
         # cartesian command(mm)
-        self.x_c = self.data[:,0]/1000000
-        self.y_c = self.data[:,1]/1000000
-        self.z_c = self.data[:,2]/1000000
+        self.x_c = np.concatenate([self.data[:,0]/1000000, np.full((expand - len(self.data)), self.data[-1,0]/1000000)])
+        self.y_c = np.concatenate([self.data[:,1]/1000000, np.full((expand - len(self.data)), self.data[-1,1]/1000000)])
+        self.z_c = np.concatenate([self.data[:,2]/1000000, np.full((expand - len(self.data)), self.data[-1,2]/1000000)])
 
         # cartesian command(degree)
-        self.pitch_c = self.data[:, 3]/1000
-        self.yaw_c = self.data[:, 4]/1000
-        self.roll_c = self.data[:,5]/1000
+        self.pitch_c = np.concatenate([self.data[:, 3]/1000, np.full((expand - len(self.data)), self.data[-1,3]/1000)])  # A --> Ry
+        self.roll_c = np.concatenate([self.data[:, 4]/1000, np.full((expand - len(self.data)), self.data[-1,4]/1000)])   # B --> -Rx  the coordinate of tool frame is up-side down
+        self.yaw_c = np.concatenate([self.data[:,5]/1000, np.full((expand - len(self.data)), self.data[-1,5]/1000)])     # C --> Rz
 
         # joint command(degree)
-        self.q1_c = self.data[:,6]/1000
-        self.q2_c = self.data[:,7]/1000
-        self.q3_c = self.data[:,8]/1000
-        self.q4_c = self.data[:,9]/1000
-        self.q5_c = self.data[:,10]/1000
-        self.q6_c = self.data[:,11]/1000
-
-        
+        self.q1_c = np.concatenate([self.data[:,6]/1000, np.full((expand - len(self.data)), self.data[-1,6]/1000)])
+        self.q2_c = np.concatenate([self.data[:,7]/1000, np.full((expand - len(self.data)), self.data[-1,7]/1000)])
+        self.q3_c = np.concatenate([self.data[:,8]/1000, np.full((expand - len(self.data)), self.data[-1,8]/1000)])
+        self.q4_c = np.concatenate([self.data[:,9]/1000, np.full((expand - len(self.data)), self.data[-1,9]/1000)])
+        self.q5_c = np.concatenate([self.data[:,10]/1000, np.full((expand - len(self.data)), self.data[-1,10]/1000)])
+        self.q6_c = np.concatenate([self.data[:,11]/1000, np.full((expand - len(self.data)), self.data[-1,11]/1000)])
 
         # Concatenate the arrays into a single 2-dimensional array
         self.q_c = np.column_stack((self.q1_c,self.q2_c,self.q3_c,
@@ -170,12 +184,15 @@ class RT605():
         self.roll = np.zeros(self.arr_size)
         self.yaw = np.zeros(self.arr_size)
 
+        self.x_center = (min(self.x_c) + max(self.x_c))/2
+        self.y_center = (min(self.y_c) + max(self.y_c))/2
+        self.z_center = (min(self.z_c) + max(self.z_c))/2
         
 
         return self.q_c
 
 
-    def setPID(self, id, gain=str(), value=np.float32):
+    def setPID(self, id, gain:str, value:np.float32)->None:
         if gain == "kvp":
             self.joints[id].setPID(ServoGain.Velocity.value.kp, value)
         elif gain =="kvi":
@@ -208,7 +225,6 @@ class RT605():
                 self.joints[i] = ServoDriver.JointServoDrive(id=i,saved_model=self.model_path+model_path_name)
             else:
                 self.joints[i] = ServoDriver.JointServoDrive(id=i,saved_model=servo_file_dir+model_path_name)
-            # self.joints[i].setInitial(pos_init=0.5)
     
     def resetServoModel(self):
         # This function is for reset the servo model parameter
@@ -216,47 +232,87 @@ class RT605():
             model_path_name = f"j{i+1}/j{i+1}.sdrv"
             joint.ImportServoModel(saved_model=self.model_path+model_path_name)
 
+    def resetServoDrive(self):
+        for i, joint in enumerate(self.joints):
+            joint.setInitial()
+
     def resetPID(self):
         # This function is for reseting the servo gain
         self.initialize_model()
+
+    def __call__(self,q_ref:np.ndarray)->tuple[float, float, float, float, float, float]:
+        """
+        Processes the input reference joint positions and returns the computed
+        position and orientation of the end effector.
         
+        Parameters:
+        q_ref (np.ndarray): A numpy array of shape (6,) representing the 
+                            reference joint positions.
+        
+        Returns:
+        tuple: A tuple containing the x, y, z coordinates and the pitch, roll, 
+               yaw angles of the end effector.
+        """
+        if not isinstance(q_ref,np.ndarray):
+            raise TypeError("Input datamust be a Numpy array with size")
+        if q_ref.shape != (6,):
+            raise ValueError("Input data must have shape (6,)")
+        
+        g_tor = np.zeros(6,dtype=np.float32)
+        fric_tor = np.zeros(6,dtype=np.float32)
+        # q = np.zeros(6,dtype=np.float32)
+        # dq = np.zeros(6,dtype=np.float32)
+        # ddq = np.zeros(6,dtype=np.float32)
 
-    def compute_thread(self, threadID, i, q_ref, g_tor):
-        # pos,vel,acc,tor,pos_err,vel_err = self.joints[threadID](q_ref-self.q_c[0][threadID],g_tor)
-        pos,vel,acc,tor,pos_err,vel_err = self.joints[threadID](q_ref,g_tor)
-        self.q[i][threadID] = pos 
-        self.dq[i][threadID] = vel 
-        self.ddq[i][threadID] = acc 
-        self.q_pos_err[i][threadID] = pos_err
-        self.torque[i][threadID] = tor
+                
+        for idx in range(6):
+            pos,vel,acc,tor,pos_err, vel_cmd  = self.joints[idx](q_ref[idx],g_tor[idx])
+            self.q[idx] = pos 
+            self.dq[idx] = vel 
+            self.ddq[idx] = acc
 
-    def start(self)->any:
+        g_tor = self.compute_GTorque(self.q[1],self.q[2],self.q[3],self.q[4],self.q[5])
+            
+        fric_tor = self.compute_friction(self.q[0],self.q[1],self.q[2],
+                                        self.q[3],self.q[4],self.q[5]) #TODO
+
+        x,y,z,pitch,roll,yaw = self.forward_kinematic(
+                                (self.q[0],self.q[1],self.q[2],self.q[3],self.q[4],self.q[5]))
+        
+        
+        return x,y,z,pitch,roll,yaw
+
+    def run_HRSS_intp(self)->None:
+        """
+        Executes the main control loop, updating joint positions, velocities,
+        accelerations, torques, and calculating various error metrics for the
+        robotic system.
+        """
         g_tor = np.zeros(6,dtype=np.float32)
         fric_tor = np.zeros(6,dtype=np.float32)
 
-        self.progress = 0 
+        self.contour_err = []
+        self.circular_err = []
+        self.ori_contour_err = []
+        self.phase = []
+        self.phase_delay = []
+        self.tracking_err_x = []
+        self.tracking_err_y = []
+        self.tracking_err_z = []
+        self.tracking_err_pitch = []
+        self.tracking_err_roll = []
+        self.tracking_err_yaw = []
+
 
         for i, q_ref in enumerate(zip(self.q1_c,self.q2_c,self.q3_c,self.q4_c,self.q5_c,self.q6_c)):
-            self.progress = i/self.arr_size*100+1
             
             for idx in range(6):
-                pos,vel,acc,tor,pos_err, vel_cmd = self.joints[idx](q_ref[idx],g_tor[idx])
+                pos,vel,acc,tor,pos_err, _ = self.joints[idx](q_ref[idx],g_tor[idx])
                 self.q[i][idx] = pos 
                 self.dq[i][idx] = vel 
                 self.ddq[i][idx] = acc 
                 self.q_pos_err[i][idx] = pos_err
                 self.torque[i][idx] = tor
-
-                # thread = threading.Thread(target=self.compute_thread, args=(idx, i, q_ref[idx], g_tor[idx]))
-                # self.thread_list.append(thread)
-                # self.thread_list[idx].start()
-
-            ## Wait for all thread to finish
-            # for thread in self.thread_list:
-                # thread.join()
-            
-            ## Clear the thread list after using it to ensure not to reuse thread again
-            # self.thread_list = []
 
             g_tor = self.compute_GTorque(self.q[i][1],self.q[i][2],self.q[i][3],
                                             self.q[i][4],self.q[i][5])
@@ -271,173 +327,51 @@ class RT605():
             self.tracking_err_x.append(self.x[i]-self.x_c[i])
             self.tracking_err_y.append(self.y[i]-self.y_c[i])
             self.tracking_err_z.append(self.z[i]-self.z_c[i])
-            self.tracking_err_pitch.append(self.pitch[i]-self.pitch_c[i])
-            self.tracking_err_roll.append(self.roll[i]-self.roll_c[i])
-            self.tracking_err_yaw.append(self.yaw[i]-self.yaw_c[i])
+            self.tracking_err_pitch.append((self.pitch[i]-self.pitch_c[i]+180)%360-180)
+            self.tracking_err_roll.append((self.roll[i]-self.roll_c[i]+180)%360-180)
+            self.tracking_err_yaw.append((self.yaw[i]-self.yaw_c[i]+180)%360-180)
+
+            
             self.tracking_err.append(LA.norm([self.tracking_err_x, self.tracking_err_y, self.tracking_err_z]))
 
             
             self.contour_err.append(self.computeCountourErr(self.x[i],self.y[i],self.z[i]))
-            
-            # No need to doing that any more
-            # self.x_c[i],self.y_c[i],self.z_c[i] = self.forward_kinematic(
-            #                         (self.q1_c[i],self.q2_c[i],self.q3_c[i],
-            #                             self.q4_c[i],self.q5_c[i],self.q6_c[i]))
-    
-    def __call__(self,q_ref:np.ndarray):
-        if not isinstance(q_ref,np.ndarray):
-            raise TypeError("Input datamust be a Numpy array with size")
-        if q_ref.shape != (6,):
-            raise ValueError("Input data must have shape (6,)")
-        
-        g_tor = np.zeros(6,dtype=np.float32)
-        fric_tor = np.zeros(6,dtype=np.float32)
-        q = np.zeros(6,dtype=np.float32)
-        dq = np.zeros(6,dtype=np.float32)
-        ddq = np.zeros(6,dtype=np.float32)
+            self.ori_contour_err.append(self.compute_ori_contour_error(self.pitch[i],self.roll[i],self.yaw[i]))
+            self.circular_err.append(self.computeCircularErr(self.x[i], self.y[i]))
 
-                
-        for idx in range(6):
-            pos,vel,acc,tor,pos_err = self.joints[idx](q_ref[idx],g_tor[idx])
-            q[idx] = pos 
-            dq[idx] = vel 
-            ddq[idx] = acc
 
-        g_tor = self.compute_GTorque(q[1],q[2],q[3],q[4],q[5])
-            
-        fric_tor = self.compute_friction(q[0],q[1],q[2],
-                                        q[3],q[4],q[5]) #TODO
+            current_angle = self.compute_angle(self.x[i],self.y[i],self.z[i])
+            ref_angle = self.compute_angle(self.x_c[i], self.y_c[i], self.z_c[i])
 
-        x,y,z,pitch,roll,yaw = self.forward_kinematic(
-                                (q[0],q[1],q[2],q[3],q[4],q[5]))
-        
-        
-        return x,y,z,pitch,roll,yaw
+            self.phase.append(current_angle)
+            delay = ref_angle - current_angle
+            if(delay<-np.pi):
+                delay+=2*np.pi
+            if(delay>np.pi):
+                delay-=2*np.pi
+            self.phase_delay.append(delay)
 
-    def save_log(self,save_dir:str=None):
-        # self.log_path = save_dir + '/log/'
+    def save_log(self,save_dir=None):
+        self.log_path = save_dir + '/log/'
 
-        # if not os.path.exists(self.log_path):
-        #     os.mkdir(self.log_path)
+        if not os.path.exists(self.log_path):
+            os.mkdir(self.log_path)
 
-        ### System log ###
-        # np.savetxt(self.log_path+'joint_pos_error.txt',self.q_pos_err,delimiter=',',header='Joint1, Joint2, Joint3, Joint4, Joint5, Joint6', fmt='%10f')
-        # np.savetxt(self.log_path+'joint_pos.txt',self.q,delimiter=',',header='Joint1, Joint2, Joint3, Joint4, Joint5, Joint6', fmt='%10f')
-        # np.savetxt(self.log_path+'tor.txt',self.torque,delimiter=',',header='Joint1, Joint2, Joint3, Joint4, Joint5, Joint6', fmt='%10f')
-        # np.savetxt(self.log_path+'contour_error.txt', self.contour_err)
-        # np.savetxt(self.log_path+'tracking_error.txt',self.tracking_err, 'fmt=%10f')
-        # np.savetxt(self.log_path+'tracking_error_x.txt',self.tracking_err_x, 'fmt=%10f')
-        # np.savetxt(self.log_path+'tracking_error_y.txt',self.tracking_err_y, 'fmt=%10f')
-        # np.savetxt(self.log_path+'tracking_error_z.txt',self.tracking_err_z, 'fmt=%10f')
-        # np.savetxt(self.log_path+'tracking_error_pitch.txt',self.tracking_err_pitch, 'fmt=%10f')
-        # np.savetxt(self.log_path+'tracking_error_roll.txt',self.tracking_err_roll, 'fmt=%10f')
-        # np.savetxt(self.log_path+'tracking_error_yaw.txt',self.tracking_err_yaw, 'fmt=%10f')
+        ## System log ###
+        np.savetxt(self.log_path+'joint_pos_error.txt',self.q_pos_err,delimiter=',',header='Joint1, Joint2, Joint3, Joint4, Joint5, Joint6', fmt='%10f')
+        np.savetxt(self.log_path+'joint_pos.txt',self.q,delimiter=',',header='Joint1, Joint2, Joint3, Joint4, Joint5, Joint6', fmt='%10f')
+        np.savetxt(self.log_path+'tor.txt',self.torque,delimiter=',',header='Joint1, Joint2, Joint3, Joint4, Joint5, Joint6', fmt='%10f')
+        np.savetxt(self.log_path+'contour_error.txt', self.contour_err)
+        np.savetxt(self.log_path+'tracking_error.txt',self.tracking_err, 'fmt=%10f')
+        np.savetxt(self.log_path+'tracking_error_x.txt',self.tracking_err_x, 'fmt=%10f')
+        np.savetxt(self.log_path+'tracking_error_y.txt',self.tracking_err_y, 'fmt=%10f')
+        np.savetxt(self.log_path+'tracking_error_z.txt',self.tracking_err_z, 'fmt=%10f')
+        np.savetxt(self.log_path+'tracking_error_pitch.txt',self.tracking_err_pitch, 'fmt=%10f')
+        np.savetxt(self.log_path+'tracking_error_roll.txt',self.tracking_err_roll, 'fmt=%10f')
+        np.savetxt(self.log_path+'tracking_error_yaw.txt',self.tracking_err_yaw, 'fmt=%10f')
 
-        try:
-            connection = pymysql.connect(
-                host= "127.0.0.1",  # Localhost IP address
-                port= 3305,          # Default MySQL port
-                user= "root",        # MySQL root user (caution: use secure credentials)
-                password= "Sam512011", # Replace with your actual password
-            )
-
-            cursor = connection.cursor()
-            cursor.execute("CREATE DATABASE IF NOT EXISTS bw_mismatch_db;")
-            cursor.execute("USE bw_mismatch_db;")
-
-            table_name = "bw_mismatch_data"
-            sql = f"""CREATE TABLE IF NOT EXISTS {table_name} (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                Gain JSON, -- Kp gain of each joints
-                Bandwidth JSON,
-                contour_err JSON,
-                max_bandwidth INT,
-                tracking_err_x JSON,
-                tracking_err_y JSON,
-                tracking_err_z JSON,
-                contour_err_img_path VARCHAR(255)
-                
-            )"""
-            cursor.execute(sql)
-
-            gain_json = json.dumps([self.joints[i].pos_amp.kp for i in range(6)])
-            bandwidth_json = json.dumps(self.bandwidth)
-            max_bandwidth = np.argmax(self.bandwidth)+1
-            contour_error_json = json.dumps(self.contour_err)
-            tracking_err_x_json = json.dumps(self.tracking_err_x)
-            tracking_err_y_json = json.dumps(self.tracking_err_y)
-            tracking_err_z_json = json.dumps(self.tracking_err_z)
-
-            sql = "SELECT MAX(id)+1 AS highest_id FROM bw_mismatch_data;"
-            cursor.execute(sql)
-            current_id = cursor.fetchone()[0]
-            # print(current_id)
-
-            fig_path = f"C:\\Users\\Samuel\\Desktop\\mismatch_dataset\\{current_id}.png"
-            c_err_img = self.plot_polar(show=False)
-            c_err_img.savefig(fig_path)
-
-            sql = """INSERT INTO bw_mismatch_data 
-                    (Gain, Bandwidth, max_bandwidth, contour_err, 
-                    tracking_err_x, tracking_err_y, tracking_err_z, contour_err_img_path) 
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"""
-            cursor.execute(sql, (gain_json, bandwidth_json, max_bandwidth, contour_error_json, 
-                                 tracking_err_x_json, tracking_err_y_json, tracking_err_z_json
-                                 ,fig_path))
-            connection.commit()
-            
-        except Exception as ex:
-            print(ex)
-        # np.savetxt(self.log_path+'joint_vel.txt', self.dq,delimiter=',',header='Joint1, Joint2, Joint3, Joint4, Joint5, Joint6', fmt='%10f')
-        # np.savetxt(self.log_path+'joint_acc.txt', self.ddq,delimiter=',',header='Joint1, Joint2, Joint3, Joint4, Joint5, Joint6', fmt='%10f')    
-
-    def pso_tune_gain_update(self):
-        """
-            this function is seted up temperary for tuning PID gain using PSO algorithm
-        """
-        g_tor = np.zeros(6,dtype=np.float32)
-        fric_tor = np.zeros(6,dtype=np.float32)
-
-        contour_err_sum = 0
-        err = 0
-
-        for i, q_ref in enumerate(zip(self.q1_c,self.q2_c,self.q3_c,self.q4_c,self.q5_c,self.q6_c)):
-            # print(q_ref)
-            for idx in range(6):
-                pos,vel,acc,tor,pos_err, vel_cmd = self.joints[idx](q_ref[idx],g_tor[idx])
-                self.q[i][idx] = pos 
-                self.dq[i][idx] = vel 
-                self.ddq[i][idx] = acc 
-                self.q_pos_err[i][idx] = pos_err
-                self.torque[i][idx] = tor
-            # print(self.q[i])
-
-            g_tor = self.compute_GTorque(self.q[i][1],self.q[i][2],self.q[i][3],
-                                            self.q[i][4],self.q[i][5])
-            
-            fric_tor = self.compute_friction(self.q[i][0],self.q[i][1],self.q[i][2],
-                                            self.q[i][3],self.q[i][4],self.q[i][5]) #TODO
-
-            self.x[i],self.y[i],self.z[i],self.pitch[i],self.roll[i],self.yaw[i] = self.forward_kinematic(
-                                    (self.q[i,0],self.q[i,1],self.q[i,2],
-                                        self.q[i,3],self.q[i,4],self.q[i,5]))
-            
-            # self.tracking_err_x.append(self.x[i]-self.x_c[i])
-            # self.tracking_err_y.append(self.y[i]-self.y_c[i])
-            # self.tracking_err_z.append(self.z[i]-self.z_c[i])
-            # self.tracking_err_pitch.append(self.pitch[i]-self.pitch_c[i])
-            # self.tracking_err_roll.append(self.roll[i]-self.roll_c[i])
-            # self.tracking_err_yaw.append(self.yaw[i]-self.yaw_c[i])
-            # self.tracking_err.append(LA.norm([self.tracking_err_x, self.tracking_err_y, self.tracking_err_z]))
-            # self.contour_err.append(self.computeCountourErr(self.x[i],self.y[i],self.z[i]))
-            c_err = self.computeCountourErr(self.x[i],self.y[i],self.z[i])
-            contour_err_sum  = contour_err_sum + c_err**2
-            # print( self.computeCountourErr(self.x[i],self.y[i],self.z[i]))
-            err = err + ((self.x_c[i]-self.x[i]) + (self.y_c[i]-self.y[i]) + (self.z_c[i]-self.z[i]))**2
-        # print(contour_err_sum)
-        
-        return contour_err_sum
-
+        np.savetxt(self.log_path+'joint_vel.txt', self.dq,delimiter=',',header='Joint1, Joint2, Joint3, Joint4, Joint5, Joint6', fmt='%10f')
+        np.savetxt(self.log_path+'joint_acc.txt', self.ddq,delimiter=',',header='Joint1, Joint2, Joint3, Joint4, Joint5, Joint6', fmt='%10f')    
 
     def plot_joint(self, show=True):
 
@@ -513,7 +447,6 @@ class RT605():
             plt.show()
         return fig
 
-    # create x,y,z plot
     def plot_cartesian(self, show=True):
         t = np.array(range(0,self.arr_size))*self.ts
         # Set the same scale for each axis
@@ -583,65 +516,180 @@ class RT605():
             plt.close(fig2)
 
         return fig1, fig2
-
-    def plot_polar(self, show=True):
-        #　This function plot the circular trajectory tracking error in polar form
-
-        if self.path_mode==2:
-            return
+    
+    def plot_phase_delay(self, show=True):
+        """
+        compute/plot? the phase delay of circular test
+        """
+        if self.path_mode>1:
+            return 
         
-        # determine the center of circle
-        x_offset = (max(self.x_c) + min(self.x_c))/2 * 1000
-        y_offset = (max(self.y_c) + min(self.y_c))/2 * 1000
-        z_offset = (max(self.z_c) + min(self.z_c))/2 * 1000
+        phase = np.zeros(self.arr_size, dtype=np.float32)
+        delay = np.zeros(self.arr_size, dtype=np.float32)
 
-        t = np.array(range(0,self.arr_size))*self.ts
-
-        r = np.zeros(self.arr_size)
-        phi = t
-
-        r_c = np.zeros(self.arr_size)
-        phi_c = np.zeros(self.arr_size)
-
-        rho = np.zeros(self.arr_size)
-
-        if self.path_mode == 0: # XY circular test
-
-            for i in range(self.arr_size):
-                r[i] = math.sqrt((self.x[i]* 1000 - x_offset)**2 + (self.y[i]* 1000 - y_offset)**2)
-                phi[i] = t[i]/t[-1] * 2* math.pi
-
-                r_c[i] = math.sqrt((self.x_c[i]* 1000 - x_offset)**2 + (self.y_c[i]* 1000 - y_offset)**2)
-                phi_c[i] = t[i]/t[-1] * 2* math.pi
-
-                rho[i] = r[i] - r_c[i]
+        x_start = self.x_c[0]
+        y_start = self.y_c[0]
+        
+        for i, (x,y,z, x_c, y_c, z_c) in enumerate(zip(self.x,self.y,self.z, self.x_c, self.y_c, self.z_c)):
 
 
-        elif self.path_mode == 1: # YZ circular test
-            for i in range(self.arr_size):
-                r[i] = math.sqrt((self.y[i]* 1000  - y_offset)**2 + (self.z[i]* 1000  - z_offset)**2)
-                phi[i] = t[i]/t[-1] * 2* math.pi
+            v_original = (x_start - self.x_center, y_start - self.y_center)
+            v = (x - self.x_center, y - self.y_center)
+            v_c = (x_c - self.x_center, y_c - self.y_center)
 
-                r_c[i] = math.sqrt((self.y_c[i]* 1000  - y_offset)**2 + (self.z_c[i]* 1000  - z_offset)**2)
-                phi_c[i] = t[i]/t[-1] * 2* math.pi
+            
 
-                rho[i] = r[i] - r_c[i]
+            # Calculate magnitudes
+            magnitude_v_original = math.sqrt((x_start - self.x_center)**2 + (y_start - self.y_center)**2)
+            magnitude_v = math.sqrt((x - self.x_center)**2 + (y - self.y_center)**2)
+            magnitude_v_c = math.sqrt((x_c - self.x_center)**2 + (y_c - self.y_center)**2)
 
-        # print(max(rho), min(rho))
-        radius_range = max(rho) - min(rho)
+            # Calculate dot product
+            dot_product = np.dot(v_original, v) #v1[0] * v2[0] + v1[1] * v2[1]
+            cosine_value = dot_product / (magnitude_v_original * magnitude_v)
 
-        fig, ax = plt.subplots(subplot_kw={'projection': 'polar'},figsize=(3.6,2.7))
-        ax.plot(phi, rho)
-        ax.set_rmax(max(rho) + 0.2*radius_range)
-        ax.set_rmin(min(rho) - 0.2*radius_range)
-        # ax.set_rticks([0.5, 1, 1.5, 2])  # Less radial ticks
-        ax.set_rlabel_position(-22.5)  # Move radial labels away from plotted line
+            angle_radians_act = math.acos(np.clip(cosine_value, -1.0, 1.0))
+
+            # Check the sign of the cross product to determine the quadrant
+            cross_product = v_original[0] * v[1] - v_original[1] * v[0]
+            if cross_product < 0:
+                # Angle is in the range of 180 to 360 degrees
+                angle_radians_act = 2*np.pi - angle_radians_act
+
+            # Calculate dot product
+            dot_product = np.dot(v_original, v_c) #v1[0] * v2[0] + v1[1] * v2[1]
+            
+
+            cosine_value = dot_product / (magnitude_v_original * magnitude_v_c)
+
+            angle_radians_ref = math.acos(np.clip(cosine_value, -1.0, 1.0))
+
+            # Check the sign of the cross product to determine the quadrant
+            cross_product = v_original[0] * v_c[1] - v_original[1] * v_c[0]
+            if cross_product < 0:
+                # Angle is in the range of 180 to 360 degrees
+                angle_radians_ref = 2*np.pi - angle_radians_ref
+
+            
+
+            phase[i] = angle_radians_act
+            delay[i] = angle_radians_ref - angle_radians_act
+            if(abs( -2*np.pi - delay[i])<0.2):
+                delay[i]+=2*np.pi
+            if(abs( 2*np.pi - delay[i]<0.2)):
+               delay[i]-=2*np.pi
+                
+
+            # print(delay[i])
+
+            
+
+        fig = plt.figure(figsize=(6,6))
+        ax = plt.subplot(111, polar=True)
+        ax.plot(phase, delay)
         ax.grid(True)
+
+        # plt.plot(delay)
+    
+
         if show:
             plt.show()
         else:
             plt.close(fig)
         return fig
+    
+    def plot_circular_polar_plot(self, show=True):
+        if self.path_mode >1:
+            print('path mode error')
+            return 
+        # Create circular error polar plot
+        fig1 = plt.figure(figsize=(6,6))
+        ax = plt.subplot(111, polar=True)
+        ax.plot(self.phase, self.circular_err)
+        ax.grid(True)
+
+        # Create height error polar plot
+        fig2 = plt.figure(figsize=(6,6))
+        ax = plt.subplot(111, polar=True)
+        ax.plot(self.phase, self.tracking_err_z)
+        ax.grid(True)
+
+        if show == False:
+            plt.close(fig1)
+            plt.close(fig2)
+        else:
+            plt.show()
+
+
+        return fig1, fig2
+
+    def plot_polar(self, show = True):
+        """
+        only works in circular mode
+        return three figure object, contour_err, orientation_contou_err, phase delay
+        """
+        if self.path_mode > 1:
+            print('path mode error')
+            return
+       
+        # Create contour err polar plot
+        fig1 = plt.figure(figsize=(6,6))
+        ax = plt.subplot(111, polar=True)
+        ax.plot(self.phase, self.contour_err)
+        ax.grid(True)
+        
+        # Create orientation error polar plot
+        fig2 = plt.figure(figsize=(6,6))
+        ax = plt.subplot(111, polar=True)
+        ax.plot(self.phase, self.ori_contour_err)
+        ax.grid(True)
+
+        # Create phase delay polar plot
+        fig3 = plt.figure(figsize=(6,6))
+        ax = plt.subplot(111, polar=True)
+        ax.plot(self.phase, self.phase_delay)
+        ax.grid(True)
+
+        
+
+        if show == False:
+            plt.close(fig1)
+            plt.close(fig2)
+            plt.close(fig3)
+        else:
+            plt.show()
+
+
+        return fig1, fig2, fig3
+    
+    def compute_angle(self, x,y,z):
+        
+        v1 = (self.x_c[0] - self.x_center, self.y_c[0] - self.y_center)
+        v2 = (x - self.x_center, y - self.y_center)
+
+        dot_product = v1[0]*v2[0] + v1[1]*v2[1]
+        magnitude_v1 = math.sqrt(v1[0]**2 + v1[1]**2)
+        magnitude_v2 = math.sqrt(v2[0]**2 + v2[1]**2)
+        cos_theta = np.clip((dot_product / (magnitude_v1 * magnitude_v2)),-1.0, 1.0)
+        
+        theta = math.acos(cos_theta)
+
+        if v1[0] * v2[1] - v1[1] * v2[0] < 0:
+            # Angle is in the range of 180 to 360 degrees
+            theta = 2*np.pi - theta
+
+        return theta
+    
+    def computeCircularErr(self, x, y):
+
+        if self.path_mode >1:
+            # print('Error: wrong path Mode')
+            return None
+        
+        R = math.sqrt((self.x_c[0] - self.x_center)**2 + (self.y_c[0] - self.y_center)**2)
+        c_err = math.sqrt(((x-self.x_center)**2 + (y-self.y_center)**2))
+
+        return c_err - R
 
     def computeCountourErr(self,x,y,z):
         #This function use the mathemetical formula to compute the circular trajectory contouring error
@@ -649,142 +697,231 @@ class RT605():
         # print(x,y,z)
 
         c_err = 0
-        x_center = (max(self.x_c) + min(self.x_c)) / 2
-        y_center = (max(self.y_c) + min(self.y_c)) / 2
-        z_center = (max(self.z_c) + min(self.z_c)) / 2
+
         # print(self.path_mode)
         if self.path_mode == 0: # XY circular test
             # print(x_center, y_center, z_center)
             # print(x,y,z)
-            R = math.sqrt((self.x_c[0] - x_center)**2 + (self.y_c[0] - y_center)**2)
-            c_err = math.sqrt((math.sqrt((x-x_center)**2 + (y-y_center)**2) - R)**2 + (z - z_center)**2)   
+            R = math.sqrt((self.x_c[0] - self.x_center)**2 + (self.y_c[0] - self.y_center)**2)
+            c_err = math.sqrt((math.sqrt((x-self.x_center)**2 + (y-self.y_center)**2) - R)**2 + (z - self.z_center)**2)   
         elif self.path_mode == 1: # YZ circular test
-            R = math.sqrt((self.y_c[0] - y_center)**2 + (self.z_c[0] - z_center)**2)
-            c_err = math.sqrt((math.sqrt((y-y_center)**2 + (z-z_center)**2) - R)**2 + (x - x_center)**2)
+            R = math.sqrt((self.y_c[0] - self.y_center)**2 + (self.z_c[0] - self.z_center)**2)
+            c_err = math.sqrt((math.sqrt((y-self.y_center)**2 + (z-self.z_center)**2) - R)**2 + (x - self.x_center)**2)
         elif self.path_mode == 2: # line circular test
             if self.x_c[0] != self.x_c[100]: # X direction line
-                c_err = math.sqrt((y - y_center)**2 + (z - z_center)**2)
+                c_err = math.sqrt((y - self.y_center)**2 + (z - self.z_center)**2)
             elif self.y_c[0] != self.y_c[100]: # Y direction line
-                c_err = math.sqrt((x - x_center)**2 + (z - z_center)**2)
+                c_err = math.sqrt((x - self.x_center)**2 + (z - self.z_center)**2)
             elif self.z_c[0] != self.z_c[100]: # Z direction line
-                c_err = math.sqrt((x - x_center)**2 + (y - y_center)**2)
+                c_err = math.sqrt((x - self.x_center)**2 + (y - self.y_center)**2)
         # print(f'{x,y,z}: {c_err}')
 
         return c_err
     
-    def computeTrackErr(self,x,y,z,psi, phi,theta):
+    def euler_to_unit_vector(self, pitch, roll, yaw):
+        pitch = np.radians(pitch) # convert from degree to radian
+        roll = np.radians(roll)
+        yaw = np.radians(yaw)
+        
+
+        # Convert Euler angles to rotation matrix
+        yaw_matrix = np.array([[np.cos(yaw), -np.sin(yaw), 0],
+                    [np.sin(yaw),  np.cos(yaw), 0],
+                    [0,        0,        1]])
+
+        pitch_matrix = np.array([[np.cos(pitch), 0, np.sin(pitch)],
+                        [0,        1, 0],
+                        [-np.sin(pitch), 0, np.cos(pitch)]])
+
+        roll_matrix = np.array([[1, 0,        0],
+                    [0, np.cos(roll), -np.sin(roll)],
+                    [0, np.sin(roll),  np.cos(roll)]])
+        
+        # Combine rotations
+        rotation_matrix = roll_matrix @ pitch_matrix @ yaw_matrix
+        # Apply the combined rotation to a unit vector (1, 0, 0) representing the positive X-axis
+        unit_vector = rotation_matrix @ [1, 0, 0]
+        
+        # Get the unit vector along the z-axis
+        # Normalize to obtain a unit vector
+        unit_vector = unit_vector / np.linalg.norm(unit_vector)
+        return unit_vector
+    
+    def compute_ori_contour_error(self,pitch, roll, yaw):
+        if self.path_mode == 3 or self.path_mode == 4:
+            return 0
+        # Convert Euler angles to unit vectors
+        v1 = self.euler_to_unit_vector(pitch, roll, yaw)
+        v2 = self.euler_to_unit_vector(self.pitch_c[0], self.roll_c[0], self.yaw_c[0]) 
+        # print(v1,v2)
+        # print(v1, v2)
+        # Compute the dot product
+        dot_product = np.dot(v1, v2)
+        
+        cross_product = v1[0]*v2[1] - v1[1]*v2[0]
+       
+        # Compute the angle between the vectors
+        angle = np.arccos(dot_product)
+
+        
+        return np.degrees(angle)
+    
+    def computeTrackErr(self,x,y,z,pitch, roll, yaw):
         t_err_x = x - self.x_c
         t_err_y = y - self.y_c
         t_err_z = z - self.z_c
-        t_err_psi = psi - self.psi_c
-        t_err_phi = phi - self.phi_c
-        t_err_theta = theta - self.theta_c
+        t_err_pitch = pitch - self.pitch_c
+        t_err_roll = roll - self.roll_c
+        t_err_yaw = yaw - self.yaw_c
 
         t_err = math.sqrt(t_err_x**2 + t_err_y**2 + t_err_z**2)
 
-        return t_err, t_err_x, t_err_y, t_err_z, t_err_psi, t_err_phi, t_err_theta
-
+        return t_err, t_err_x, t_err_y, t_err_z, t_err_pitch, t_err_roll, t_err_yaw
     
-    def freq_response(self, fs=2000,f0=0.1,f1=50,t0=0,t1=1,a0=0.5,a1=0.001, show=True):
+    def sweep(self,fs=2000, f0=0.1, f1=1000, t0=0, t1=1, a0=0.1, a1=0.001, tau=0.2, show=True):
         '''
-        determine the frequency response of system:
+        Determine the frequency response of the system:
         fs: sampling rate
-        f0: start freq
-        f1: end freq
+        f0: start frequency
+        f1: end frequency
         t0: start time
         t1: duration of chirp
         a0: start amplitude
         a1: end amplitude
+        tau: time constant (in seconds) -- for exponential decay
         '''
-        t = np.linspace(t0,t1,fs*(t1-t0),endpoint=False)
+        # print(fs)
+        # t1 = self.arr_size*self.ts
+        t = np.linspace(t0, t1, int(fs * (t1 - t0)), endpoint=False)
 
-        # generate chirp sine signal
-        amp_decay = a0 + (a1 - a0)/(t1-t0)*t
-        f = f0 + (f1-f0)/(t1-t0)*t
-        chirp_sine = amp_decay*np.sin(2*np.pi*f*t)
+        # Generate chirp sine signal
+        amp_decay = a0 * np.exp(-t / tau)
+        f = f0 + (f1 - f0) / (t1 - t0) * t
+        chirp_sine = amp_decay * np.sin(2 * np.pi * f * t)
 
-
-        shape = (6,6,len(t))
+        shape = (6, 6, len(t))
 
         q_c = np.zeros(shape)
 
-        # initialize q_c with initial joint position
+        # Initialize q_c with initial joint position
         for i in range(6):
             for j in range(6):
-                q_c[i][j] = [self.q_c[0][j] for _ in range(len(t))]
-                if i==j:
-                    q_c[i][j] = q_c[i][j] + chirp_sine
-                    
-                    
+                q_c[i][j] = np.full_like(t, self.q_c[0][j])
+                if i == j:
+                    q_c[i][j] += chirp_sine
+
         q = np.zeros(6)
 
-        self.fig, self.ax = plt.subplots(2, 1, figsize=(4.3, 4.1))
+        
+        bandwidth = []
 
-        self.bandwidth = []
+        fig, ax = plt.subplots(2, 1, figsize=(4.3, 4.1))
 
-        #determine frequency response of each joint
+        # Determine frequency response of each joint
         for joint_num in range(6):
             output = []
-            g_tor = np.zeros(6,dtype=np.float32)
-            fric_tor =  np.zeros(6,dtype=np.float32)
-            for time in range(len(t)):
+            g_tor = np.zeros(6, dtype=np.float32)
+            fric_tor = np.zeros(6, dtype=np.float32)
+            for time_idx, time_val in enumerate(t):
                 for idx in range(6):
-                
-                    q[idx],dq,ddq,self.__tor_internal, pos_err, vel_cmd = self.joints[idx](q_c[joint_num][idx][time],g_tor[idx])
-                    if joint_num==idx:
-                        output.append(q[idx])    
+                    q[idx], _, _, _, _, _ = self.joints[idx](q_c[joint_num][idx][time_idx], g_tor[idx])
+                    if joint_num == idx:
+                        output.append(q[idx])
 
-                g_tor = self.compute_GTorque(q[1],q[2],q[3],q[4],q[5])
-                fric_tor = self.compute_friction(q[0],q[1],q[2],q[3],q[4],q[5])
-
-            # fig, ax = plt.subplots()
-            # ax.plot(q_c[joint_num][joint_num], label='q_c')
-            # ax.plot(output,label='q_s')
-            # ax.set_xlabel('Index')
-            # ax.set_ylabel('Values')
-            # ax.legend()
+                g_tor = self.compute_GTorque(*q[1:])
+                fric_tor = self.compute_friction(*q)
+            
+            # plt.plot(t, output, label='Output')
+            # plt.plot(t, q_c[joint_num][joint_num], label='q_c[joint_num][joint_num]')
+            # plt.legend()
             # plt.show()
+            yf = np.fft.fft(output) * 2/len(output)
+            xf = np.fft.fft(q_c[joint_num][joint_num])* 2/len(output)
+            # print(q_c[joint_num][joint_num].shape)
+            # print(xf.shape)
+            
 
-            yf = np.fft.fft(output)
-            xf = np.fft.fft(q_c[joint_num][joint_num])
+            freqs = np.fft.fftfreq(len(yf)) * fs
+            mag = np.abs(yf / xf)
 
-            freqs = np.fft.fftfreq(len(yf/xf)) * fs
-            mag = np.abs(yf/xf)
-
+            
             # Finding the index of the frequency where magnitude reaches -3 dB
             dB_threshold = -3
-            
-            
-            diff = 20*np.log10(mag[:len(mag)//2]) - dB_threshold
+            diff = 20 * np.log10(mag[:len(mag) // 2]) - dB_threshold
 
-            for index, f in enumerate(diff):
-                if  f < 0:
-                    break
-           
-            self.bandwidth.append(freqs[index])
+            index = np.argmax(diff < 0)
 
-            phase = np.angle(yf/xf)
-            
-        if show:
-            self.ax[0].semilogx(freqs[:len(freqs)//2], 20*np.log10(mag[:len(mag)//2]), label=f"joint {joint_num+1} - {freqs[index]:.2f} Hz")   
-            
-            self.ax[0].set_xlabel('Frequency [Hz]')
-            self.ax[0].set_ylabel('Magnitude [dB]')
-            self.ax[0].grid(True)
-            self.ax[0].set_xlim([f0, f1])
-            self.ax[1].semilogx(freqs[:len(freqs)//2], phase[:len(phase)//2])
-            self.ax[1].set_xlabel('Frequency [Hz]')
-            self.ax[1].set_ylabel('Phase [rad]')
-            
-            self.ax[1].grid(True)
-            self.ax[1].set_xlim([f0, f1])
-            self.ax[0].legend()
+            bandwidth.append(freqs[index])
 
+            phase = np.angle(yf / xf)
+            
+            if show:
+                
+                ax[0].semilogx(freqs[:len(freqs) // 2], 20 * np.log10(mag[:len(mag) // 2]),
+                                label=f"joint {joint_num + 1} - {freqs[index]:.2f} Hz")
+                ax[0].set_xlabel('Frequency [Hz]')
+                ax[0].set_ylabel('Magnitude [dB]')
+                ax[0].grid(True)
+                ax[0].set_xlim([f0, f1])
+                ax[1].semilogx(freqs[:len(freqs) // 2], phase[:len(phase) // 2])
+                ax[1].set_xlabel('Frequency [Hz]')
+                ax[1].set_ylabel('Phase [rad]')
+                ax[1].grid(True)
+                ax[1].set_xlim([f0, f1])
+                ax[0].legend()
+        
+        if show and fig is not None:
             plt.show()
         else:
-            plt.close(self.fig)
+            plt.close(fig)
 
-        return self.fig
+        return fig
+    
+    def freq_response(self,mode='pos', show=True):
+        
+        self.bandwidth = []
+
+        fig, ax = plt.subplots(2, 1, figsize=(4.3, 4.1))
+
+        for i, joint in enumerate(self.joints):
+            
+            mag, phase, om = joint.freq_response(False, loop_mode=mode)
+
+            # Interpolate omega and magnitude_response to num_points
+            omega_interp = np.linspace(om[0], om[-1], 10000)
+            magnitude_interp = np.interp(omega_interp, om, mag)
+            phase_interp = np.interp(omega_interp, om, phase)
+
+            # Convert magnitude response to dB
+            magnitude_db = 20 * np.log10(magnitude_interp)
+
+            max_magnitude_db = np.max(magnitude_db)
+            index_bandwidth = np.argmin(abs(magnitude_db - (-3)))
+
+            self.bandwidth.append(omega_interp[index_bandwidth]/ (2*np.pi))
+            # print(omega_interp[index_bandwidth]/ (2*np.pi))
+
+            # Plot magnitude response
+            if show:
+                
+                ax[0].semilogx(omega_interp/ (2*np.pi), 20 * np.log10(magnitude_interp),
+                                    label=f"joint {i + 1} - {omega_interp[index_bandwidth]/ (2*np.pi):.2f} Hz")
+                ax[0].set_xlabel('Frequency (Hz)')
+                ax[0].set_ylabel('Magnitude (dB)')
+               
+                ax[0].grid(True)
+                ax[0].set_xlim([0.1, 100])
+                ax[0].legend()
+                ax[1].semilogx(omega_interp/ (2*np.pi), phase_interp)
+                ax[1].set_xlabel('Frequency [Hz]')
+                ax[1].set_ylabel('Phase [rad]')
+                ax[1].grid(True)
+                ax[1].set_xlim([0.1, 100])
+                
+        if show:
+            plt.show()
+        else:
+            plt.close(fig)
 
     def plot_torq(self):
 
@@ -795,4 +932,54 @@ class RT605():
         plt.grid(True)
         plt.legend()
         plt.show()
+
+    def pso_tune_gain_update(self):
+        """
+            this function is seted up temperary for tuning PID gain using PSO algorithm
+        """
+        g_tor = np.zeros(6,dtype=np.float32)
+        fric_tor = np.zeros(6,dtype=np.float32)
+
+        contour_err_sum = 0
+        err = 0
+
+        c_err = []
+        ori_c_err = []
+
+        for i, q_ref in enumerate(zip(self.q1_c,self.q2_c,self.q3_c,self.q4_c,self.q5_c,self.q6_c)):
+            # print(q_ref)
+            for idx in range(6):
+                pos,vel,acc,tor,pos_err, vel_cmd = self.joints[idx](q_ref[idx],g_tor[idx])
+                self.q[i][idx] = pos 
+                self.dq[i][idx] = vel 
+                self.ddq[i][idx] = acc 
+                self.q_pos_err[i][idx] = pos_err
+                self.torque[i][idx] = tor
+            # print(self.q[i])
+
+            g_tor = self.compute_GTorque(self.q[i][1],self.q[i][2],self.q[i][3],
+                                            self.q[i][4],self.q[i][5])
+            
+            fric_tor = self.compute_friction(self.q[i][0],self.q[i][1],self.q[i][2],
+                                            self.q[i][3],self.q[i][4],self.q[i][5]) #TODO
+
+            self.x[i],self.y[i],self.z[i],self.pitch[i],self.roll[i],self.yaw[i] = self.forward_kinematic(
+                                    (self.q[i,0],self.q[i,1],self.q[i,2],
+                                        self.q[i,3],self.q[i,4],self.q[i,5]))
+
+            c_err.append(self.computeCountourErr(self.x[i],self.y[i],self.z[i])) # tool path contour error
+            contour_err_sum  = contour_err_sum + c_err[i]**2
+
+            ori_c_err.append(self.compute_ori_contour_error(self.pitch[i],self.roll[i],self.yaw[i])) # orientation contour error
+            
+
+            # print( self.computeCountourErr(self.x[i],self.y[i],self.z[i]))
+            # err = err + ((self.x_c[i]-self.x[i]) + (self.y_c[i]-self.y[i]) + (self.z_c[i]-self.z[i]))**2
+
+        # loss = max(contour_error) + standard deviation(contour_err) + mean(contour_error)
+        loss = max([abs(num) for num in c_err]) + statistics.mean(c_err) + statistics.stdev(c_err) + \
+                max([abs(num) for num in ori_c_err]) + statistics.mean(ori_c_err) + statistics.stdev(ori_c_err)
         
+        # print(contour_err_sum)
+        
+        return loss
