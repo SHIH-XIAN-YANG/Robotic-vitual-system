@@ -108,7 +108,6 @@ def find_closest_index(data, target):
     return closest_index
 
 
-
 def lagrange_Interpolation(x_data, y_data, min_x, max_x, pointcount=1000):
     opt_gain = 0.0
     min_y = np.inf
@@ -127,7 +126,6 @@ def lagrange_Interpolation(x_data, y_data, min_x, max_x, pointcount=1000):
         if y < min_y:
             min_y = y
             opt_gain = x
-
 
     return opt_gain
 
@@ -190,9 +188,6 @@ def main():
     kpi = []
     kvp = []
     kvi = []
-    
-
-    
 
     kpp.append(rt605.joints[lag_joint].get_PID(ServoGain.Position.value.kp))
     kpi.append(rt605.joints[lag_joint].get_PID(ServoGain.Position.value.ki))
@@ -214,6 +209,7 @@ def main():
         rt605.run_HRSS_intp()
         gain_deviation.append(max(rt605.q_c[:,lag_joint]) - max(rt605.q[:, lag_joint]))
         rt605.resetServoDrive()
+        print(f"kpp: {kpp[iter]} || gain_deviation: {gain_deviation[iter]}")
 
     
     save_file_path = 'gain.csv'
