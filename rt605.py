@@ -30,6 +30,8 @@ from matplotlib.animation import FuncAnimation
 from mpl_toolkits import mplot3d
 from mpl_toolkits.mplot3d import axes3d
 from mpl_toolkits.basemap import Basemap
+from tqdm import tqdm
+
 
 ### Data base ###
 import json
@@ -192,17 +194,18 @@ class RT605():
         return self.q_c
 
 
-    def setPID(self, id, gain:str, value:np.float32)->None:
-        if gain == "kvp":
-            self.joints[id].setPID(ServoGain.Velocity.value.kp, value)
-        elif gain =="kvi":
-            self.joints[id].setPID(ServoGain.Velocity.value.ki, value)
-        elif gain == "kpp":
-            self.joints[id].setPID(ServoGain.Position.value.kp, value)
-        elif gain == "kpi":
-            self.joints[id].setPID(ServoGain.Position.value.ki, value)
-        else:
-            print("input argument error!!")
+    def setPID(self, id, gain:ServoGain, value:np.float32)->None:
+        # if gain == "kvp":
+        #     self.joints[id].setPID(ServoGain.Velocity.value.kp, value)
+        # elif gain =="kvi":
+        #     self.joints[id].setPID(ServoGain.Velocity.value.ki, value)
+        # elif gain == "kpp":
+        #     self.joints[id].setPID(ServoGain.Position.value.kp, value)
+        # elif gain == "kpi":
+        #     self.joints[id].setPID(ServoGain.Position.value.ki, value)
+        # else:
+        #     print("input argument error!!")
+        self.joints[id].setPID(gain, value)
 
     def setMotorModel(self, id, component=str(), value=np.float32):
         if component == "Jm":
@@ -227,16 +230,25 @@ class RT605():
                 self.joints[i] = ServoDriver.JointServoDrive(id=i,saved_model=servo_file_dir+model_path_name)
     
     def resetServoModel(self):
+        """
+        reset servo model(e.g: Jm, bm...) to its initial values
+        """
         # This function is for reset the servo model parameter
         for i,joint in self.joints:
             model_path_name = f"j{i+1}/j{i+1}.sdrv"
             joint.ImportServoModel(saved_model=self.model_path+model_path_name)
 
-    def resetServoDrive(self):
+    def resetServoDrive(self)->None:
+        """
+        reset each joints to its initial position
+        """
         for i, joint in enumerate(self.joints):
-            joint.setInitial()
+            joint.setInitial(self.q_c[0, i])
 
     def resetPID(self):
+        """
+        reset Servo gain to its initial value
+        """
         # This function is for reseting the servo gain
         self.initialize_model()
 
@@ -304,7 +316,7 @@ class RT605():
         self.tracking_err_yaw = []
 
 
-        for i, q_ref in enumerate(zip(self.q1_c,self.q2_c,self.q3_c,self.q4_c,self.q5_c,self.q6_c)):
+        for i, q_ref in tqdm(enumerate(zip(self.q1_c,self.q2_c,self.q3_c,self.q4_c,self.q5_c,self.q6_c))):
             
             for idx in range(6):
                 pos,vel,acc,tor,pos_err, _ = self.joints[idx](q_ref[idx],g_tor[idx])
@@ -350,6 +362,8 @@ class RT605():
             if(delay>np.pi):
                 delay-=2*np.pi
             self.phase_delay.append(delay)
+
+        self.resetServoDrive()
 
     def save_log(self,save_dir=None):
         self.log_path = save_dir + '/log/'

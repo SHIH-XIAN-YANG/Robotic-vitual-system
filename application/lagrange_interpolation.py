@@ -16,6 +16,8 @@ from rt605 import RT605
 from libs.ServoMotor import ServoMotor
 from libs.type_define import*
 
+from matplotlib import pyplot as plt
+
 class CNN1D(nn.Module):
     def __init__(self, input_dim=6, output_dim=6):
         super(CNN1D, self).__init__()
@@ -120,11 +122,12 @@ def lagrange_Interpolation(x_data, y_data, min_x, max_x, pointcount=1000):
         for i in range(len(x_data)):
             term = y_data[i]
             for j in range(len(x_data)):
-                if j != i:
+                if (j != i) and (x_data[i] != x_data[j]):
                     term = term * (x - x_data[j])/(x_data[i] - x_data[j])
+                
             y = y + term
-        if y < min_y:
-            min_y = y
+        if abs(y) < min_y:
+            min_y = abs(y)
             opt_gain = x
 
     return opt_gain
@@ -179,11 +182,11 @@ def main():
     # Tuen Kpp gain
     #define min max value of gain
     k_min = 5
-    k_max = 500
-    r_max = 1
-    r_min = 0
+    k_max = 100
+    r_max = 0.1
+    r_min = -0.1
 
-    iters = 10
+    iters = 50
     kpp = []
     kpi = []
     kvp = []
@@ -194,21 +197,33 @@ def main():
     kvp.append(rt605.joints[lag_joint].get_PID(ServoGain.Velocity.value.kp))
     kvi.append(rt605.joints[lag_joint].get_PID(ServoGain.Velocity.value.ki))
 
-    kpp.append(kpp[0] + gain_deviation[0]/(r_max - r_min) * (k_max - k_min))
-    rt605.setPID(lag_joint,"kpp", kpp[1])
+    kpp.append(kpp[0] + gain_deviation[0]/(k_max - k_min) * (r_max - r_min))
+    
+    rt605.setPID(lag_joint,ServoGain.Position.value.kp, kpp[1])
 
-    rt605.resetServoDrive()
+
 
     rt605.run_HRSS_intp()
     gain_deviation.append(max(rt605.q_c[:,lag_joint]) - max(rt605.q[:, lag_joint]))
-    rt605.resetServoDrive()
+
+    # plt.figure()
+    # plt.plot(rt605.time, rt605.q_c[:,lag_joint], label="ref")
+    # plt.plot(rt605.time, rt605.q[:, lag_joint], label="act")
+    # plt.legend()
+    # plt.show()
 
     for iter in range(2, iters):
         
-        kpp.append(lagrange_Interpolation(kpp, gain_deviation, k_min, k_max, 1000))
+        kpp.append(lagrange_Interpolation(kpp, gain_deviation, k_min, k_max, 10000))
+        rt605.setPID(lag_joint,ServoGain.Position.value.kp, kpp[iter])
         rt605.run_HRSS_intp()
+        # rt605.plot_joint(True)
         gain_deviation.append(max(rt605.q_c[:,lag_joint]) - max(rt605.q[:, lag_joint]))
-        rt605.resetServoDrive()
+        # plt.figure()
+        # plt.plot(rt605.time, rt605.q_c[:,lag_joint], label="ref")
+        # plt.plot(rt605.time, rt605.q[:, lag_joint], label="act")
+        # plt.legend()
+        # plt.show()
         print(f"kpp: {kpp[iter]} || gain_deviation: {gain_deviation[iter]}")
 
     
