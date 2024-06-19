@@ -169,7 +169,7 @@ def main():
 
         #interpolation.run(ServoGain.Velocity.value.ki, 0.01, 10)
 
-        # interpolation.run(ServoGain.Position.value.kp, 0.01, 100)
+        interpolation.run(ServoGain.Position.value.kp, 0.01, 100)
 
         # interpolation.run(ServoGain.Position.value.ki, 0.1, 10)
 
