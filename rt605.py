@@ -31,6 +31,7 @@ from mpl_toolkits import mplot3d
 from mpl_toolkits.mplot3d import axes3d
 from mpl_toolkits.basemap import Basemap
 from tqdm import tqdm
+from tqdm.contrib import tzip
 
 
 ### Data base ###
@@ -316,7 +317,7 @@ class RT605():
         self.tracking_err_yaw = []
 
 
-        for i, q_ref in tqdm(enumerate(zip(self.q1_c,self.q2_c,self.q3_c,self.q4_c,self.q5_c,self.q6_c))):
+        for i, q_ref in enumerate(tzip(self.q1_c,self.q2_c,self.q3_c,self.q4_c,self.q5_c,self.q6_c)):
             
             for idx in range(6):
                 pos,vel,acc,tor,pos_err, _ = self.joints[idx](q_ref[idx],g_tor[idx])

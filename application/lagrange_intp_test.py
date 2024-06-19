@@ -51,11 +51,12 @@ class Intp():
         self.trajectory_path = "../data/Path/"+"sine_f6_full_joints.txt"
 
         self.rt605.load_HRSS_trajectory(self.trajectory_path)
-        self.rt605.compute_GTorque(en=True)
-        self.rt605.compute_friction(en=True)
+        self.rt605.compute_GTorque.enable_Gtorq(en=True)
+        self.rt605.compute_friction.enable_friction(en=True)
 
 
         # Run model inference: get the initial lag joints values
+        # Initial mismatch classification model
         self.model_weight_path = '6_12_17_23_best_model_acc_95.875.pth'
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         print(self.device)
@@ -69,12 +70,17 @@ class Intp():
         self.min_phase_shift = -0.1
 
         self.iter = iter
+
+        self.gain_deviation = []
+        self.phase_shift = []
+        self.gain = []
         
     
     def inference(self)->None:
         self.rt605.run_HRSS_intp()
-        self.q_pos_err = torch.from_numpy(self.rt605.q_pos_err).float().permute(1,0).unsqueeze(0)
-        self.q_pos_err.to(self.device)
+        self.q_pos_err = torch.from_numpy(self.rt605.q_pos_err).float()
+        self.q_pos_err = self.q_pos_err.permute(1, 0).unsqueeze(0)
+        self.q_pos_err = self.q_pos_err.to(self.device)
 
         with torch.no_grad():
             output = self.model(self.q_pos_err)
@@ -147,20 +153,28 @@ class Intp():
 
             print(f"Data successfully written to {save_file_path}")
 
+    def plot_result(self):
+        self.rt605.plot_joint()
+        self.rt605.plot_error()
+        self.rt605.freq_response()
+
 def main():
     interpolation = Intp()
     
-    for iter in range(0, 6):
+    for iter in range(0, 1):
     
         interpolation.inference()
         
-        interpolation.run(ServoGain.Velocity.value.kp, 0, 100)
+        interpolation.run(ServoGain.Velocity.value.kp, 0.01, 100)
 
-        interpolation.run(ServoGain.Velocity.value.ki, 0, 100)
+        #interpolation.run(ServoGain.Velocity.value.ki, 0.01, 10)
 
-        interpolation.run(ServoGain.Position.value.kp, 0, 100)
+        # interpolation.run(ServoGain.Position.value.kp, 0.01, 100)
 
-        interpolation.run(ServoGain.Position.value.ki, 0, 100)
+        # interpolation.run(ServoGain.Position.value.ki, 0.1, 10)
+
+        interpolation.plot_result()
+
 
 
 
