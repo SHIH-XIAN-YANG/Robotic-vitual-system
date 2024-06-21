@@ -72,6 +72,8 @@ class RT605():
         self.roll = None
         self.yaw = None
 
+        self.unstable_state = False
+
         self.contour_err = []
         self.circular_err = []
         self.ori_contour_err = []
@@ -365,6 +367,10 @@ class RT605():
             self.phase_delay.append(delay)
 
         self.resetServoDrive()
+        for joint in self.joints:
+            if joint.unstable_state[0] == True:
+                print("Servo unstatble")
+                self.unstable_state = True
 
     def save_log(self,save_dir=None):
         self.log_path = save_dir + '/log/'
