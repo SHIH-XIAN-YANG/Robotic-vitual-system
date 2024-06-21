@@ -51,6 +51,9 @@ class JointServoDrive:
     vel_loop_pm: np.float32 = None
     Mpp: np.float32 = None # resonant peak magnitude
     Mvp: np.float32 = None # resonant peak magnitude
+
+    # state to determine if unstatble
+    unstable_state: list
     
     # -------------------------------------------------------------
     def __init__(self, id:int, saved_model:str):
@@ -61,6 +64,7 @@ class JointServoDrive:
         self.__flag = False
         self.__current_time = 0
         self.__nonlinear_enabled = False
+        self.unstable_state = [False]
         if saved_model[-5:] != ".sdrv":
             print("Error syntax.")
         else:
@@ -273,7 +277,7 @@ class JointServoDrive:
         # --------------- Velocity Loop: ---------------
         self.vel_err_internal = self.vel_node(self.vel_cmdf_internal, -1.0*self.__vel_internal)
         self.tor_cmd_internal = self.vel_amp(self.vel_err_internal)
-        self.tor_cmd_internal = self.tor_cmd_lim(self.tor_cmd_internal)
+        self.tor_cmd_internal = self.tor_cmd_lim(self.tor_cmd_internal, self.unstable_state)
 
         # if self.__joint_ID==1:
         #     print(f'tor_cmd_internal:{self.tor_cmd_internal}')

@@ -338,16 +338,20 @@ class Limitation(ForwardLoop1D):
         self.H_lim = max(lim)
         self.L_lim = min(lim)
     #
-    def __call__(self, x:np.float32):
+    def __call__(self, x:np.float32, unstable:list=None):
         if self.__enabled == False:
             self.y = x
         else:
             if x >= self.H_lim:
                 self.y = self.H_lim
-                print('value over upper bound!!')
+                #print('value over upper bound!!')
+                if unstable is not None:
+                    unstable[0] = True
             elif x <= self.L_lim:
-                print('value under lower bound!!')
+                #print('value under lower bound!!')
                 self.y = self.L_lim
+                if unstable is not None:
+                    unstable[0] = True
             else:
                 self.y = x
         return self.y
