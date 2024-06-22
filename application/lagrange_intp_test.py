@@ -8,6 +8,7 @@ from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 import csv
 import json
+import json
 
 sys.path.append('..')
 #sys.path.insert(1,"../rt605")
@@ -21,6 +22,10 @@ from mismatch_classification.model_playground import *
 
 from matplotlib import pyplot as plt
 
+
+class FeatureType(Enum):
+    magnitude_deviation = 0
+    phase_shift = 1
 
 class FeatureType(Enum):
     magnitude_deviation = 0
@@ -42,6 +47,11 @@ class Intp():
     magnitude_deviation: list
     max_magnitude_deviation: float
     min_magnitude_deviation: float
+    feature_type: FeatureType
+    
+    magnitude_deviation: list
+    max_magnitude_deviation: float
+    min_magnitude_deviation: float
 
     phase_shift: list
     max_phase_shift: float
@@ -56,11 +66,23 @@ class Intp():
     max_gain: float
     min_gain: float
 
+
+
+    feature: list
+    max_feature: float
+    min_feature: float
+
+    max_gain: float
+    min_gain: float
+
     iter:int
+    tune_mode: ServoGain
     tune_mode: ServoGain
     gain: list
 
     save_file: str
+
+    tuned_history: dict
 
     tuned_history: dict
 
@@ -90,8 +112,24 @@ class Intp():
         self.iter = iter
 
         self.magnitude_deviation = []
+        self.magnitude_deviation = []
         self.phase_shift = []
         self.gain = []
+
+        self.features = []
+        self.max_feature = 2
+        self.min_feature = -2
+        
+        self.max_gain = 0.0
+        self.min_gain = 0.0
+
+        self.feature_type = None
+
+        self.tuned_history = {}
+        self.tuned_history["Kpp"] = {}
+        self.tuned_history["Kpi"] = {}
+        self.tuned_history["Kvp"] = {}
+        self.tuned_history["Kvi"] = {}
 
         self.features = []
         self.max_feature = 2
@@ -121,8 +159,11 @@ class Intp():
         print(f"Initial lag joint: {self.lag_joint}")
     
     def lagrange_intp(self, x_data, y_data, min_x, max_x, pointcount=10000)->float:
+    def lagrange_intp(self, x_data, y_data, min_x, max_x, pointcount=10000)->float:
         opt_gain = 0.0
         min_y = np.inf
+        self.max_gain = max_x
+        self.min_gain = min_x
         self.max_gain = max_x
         self.min_gain = min_x
 
@@ -144,6 +185,42 @@ class Intp():
 
         return opt_gain
     
+    def compute_magnitude_deviation(self):
+        return max(self.rt605.q_c[:, self.lag_joint]) - max(self.rt605.q[:, self.lag_joint])
+
+    def compute_phase_shift(self):
+        def find_closest_index(data, target):
+            """
+            find the closest index of trajectory's zeros crossing point
+            
+            """
+            min_diff = float('inf')
+            closest_index = -1
+
+            quarter_len = len(data) // 4
+            three_quarter_len = (len(data)*3) // 4
+
+            for idx in range(quarter_len, len(data)):
+                value = data[idx]
+                diff = abs(value - target)
+
+                if diff<min_diff:
+                    min_diff = diff
+                    closest_index = idx
+            return closest_index
+        phase_shift = self.rt605.ts * (find_closest_index(self.rt605.q[:, self.lag_joint], self.rt605.q_c[0, self.lag_joint]) \
+                                        - find_closest_index(self.rt605.q_c[:, self.lag_joint], self.rt605.q_c[0, self.lag_joint]))
+
+        return phase_shift
+    
+    def run(self, tune_mode: ServoGain, k_min:float, k_max:float, feature_type: FeatureType=FeatureType.magnitude_deviation):
+        self.tune_mode = tune_mode
+        self.max_gain = k_max
+        self.min_gain = k_min
+        self.feature_type = feature_type
+        
+        self.magnitude_deviation.append(self.compute_magnitude_deviation())
+        self.phase_shift.append(self.compute_phase_shift())
     def compute_magnitude_deviation(self):
         return max(self.rt605.q_c[:, self.lag_joint]) - max(self.rt605.q[:, self.lag_joint])
 
@@ -208,7 +285,33 @@ class Intp():
         self.print_gain(iter=1)
 
         # Start lagrange interpolation
+        if self.feature_type == FeatureType.magnitude_deviation:
+            self.magnitude_deviation.append(self.compute_magnitude_deviation())
+        else:
+            self.phase_shift.append(self.compute_phase_shift())
+
+        self.print_gain(iter=1)
+
+        # Start lagrange interpolation
         for iter in range(2, self.iter):
+            if self.feature_type == FeatureType.magnitude_deviation:
+                next_gain = self.lagrange_intp(self.gain, self.magnitude_deviation, k_min, k_max, 10000)
+                self.gain.append(next_gain)
+            
+                self.rt605.setPID(self.lag_joint, tune_mode, next_gain)
+                self.rt605.run_HRSS_intp()
+            
+                self.magnitude_deviation.append(self.compute_magnitude_deviation())
+            else:
+                next_gain = self.lagrange_intp(self.gain, self.phase_shift, k_min, k_max, 10000)
+                self.gain.append(next_gain)
+            
+                self.rt605.setPID(self.lag_joint, tune_mode, next_gain)
+                self.rt605.run_HRSS_intp()
+            
+                self.phase_shift.append(self.compute_phase_shift())
+            self.print_gain(iter)
+            # self.rt605.plot_joint(True)
             if self.feature_type == FeatureType.magnitude_deviation:
                 next_gain = self.lagrange_intp(self.gain, self.magnitude_deviation, k_min, k_max, 10000)
                 self.gain.append(next_gain)
