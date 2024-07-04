@@ -158,7 +158,7 @@ class Intp():
         self.lag_joint = torch.argmax(output).item()
         print(f"Initial lag joint: {self.lag_joint}")
     
-    def lagrange_intp(self, x_data, y_data, min_x, max_x, pointcount=10000)->float:
+    
     def lagrange_intp(self, x_data, y_data, min_x, max_x, pointcount=10000)->float:
         opt_gain = 0.0
         min_y = np.inf
@@ -420,7 +420,7 @@ class Intp():
         #         save_file_path = f"kvp_iter_{self.iter}_max_{self.max_gain}_phase.json"
         #     elif self.tune_mode == ServoGain.Velocity.value.ki:
         #         save_file_path = f"kvi_iter_{self.iter}_max_{self.max_gain}_phase.json"
-        save_file_path = "test2.json"
+        save_file_path = "test3.json"
         
         # Writing the dictionary to a JSON file
         with open(save_file_path, 'w') as json_file:
@@ -518,7 +518,7 @@ def main():
     # interpolation.save_file()
 
 def test(tune_mode:ServoGain, min, max, feature_type:FeatureType):
-    interpolation = Intp(iter=20)
+    interpolation = Intp(iter=10)
     interpolation.inference()
 
     interpolation.run(tune_mode, min, max, feature_type)
