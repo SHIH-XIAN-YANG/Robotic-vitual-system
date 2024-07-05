@@ -157,8 +157,39 @@ class Intp():
         
         self.lag_joint = torch.argmax(output).item()
         print(f"Initial lag joint: {self.lag_joint}")
+
     
     
+    def lagrange_2D(self, x_data, y_data, z_data, min_x, max_x, min_y, max_y, pointcount=1000)->tuple:
+        result = 0
+        min_z = np.inf
+        def lagrange_basis_polynomial(x, x_points, i):
+            basis = 1
+            for j in range(len(x_points)):
+                if i != j:
+                    basis *= (x - x_points[j]) / (x_points[i] - x_points[j])
+            return basis
+        
+        opt_x, opt_y = 0.0,0.0
+
+        for idx_x in range(pointcount):
+            x = min_x + idx_x * (max_x - min_x)/pointcount
+
+            for idx_y in range(pointcount):
+                y = min_y + idx_y * (max_y - min_y)/pointcount
+
+                for i in range(len(x_data)):
+                    for j in range(len(y_data)):
+                        L_i = lagrange_basis_polynomial(x, x_data, i)
+                        M_j = lagrange_basis_polynomial(y, y_data, j)
+                        result += z_data[i][j] * L_i * M_j
+                if result < min_z:
+                    min_z = result
+                    opt_x = x
+                    opt_y = y
+
+        return opt_x, opt_y
+
     def lagrange_intp(self, x_data, y_data, min_x, max_x, pointcount=10000)->float:
         opt_gain = 0.0
         min_y = np.inf
