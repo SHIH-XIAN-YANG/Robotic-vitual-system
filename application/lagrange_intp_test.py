@@ -27,9 +27,9 @@ class FeatureType(Enum):
     magnitude_deviation = 0
     phase_shift = 1
 
-class FeatureType(Enum):
-    magnitude_deviation = 0
-    phase_shift = 1
+class Loop_Type(Enum):
+    pos = 0
+    vel = 1
 
 class Intp():
     model: CNN1D
@@ -84,7 +84,7 @@ class Intp():
 
     tuned_history: dict
 
-    tuned_history: dict
+    tune_loop_type: Loop_Type
 
     def __init__(self, iter:int=10):
         self.rt605 = RT605()
@@ -145,6 +145,8 @@ class Intp():
         self.tuned_history["Kpi"] = {}
         self.tuned_history["Kvp"] = {}
         self.tuned_history["Kvi"] = {}
+
+        tune_loop_type = Loop_Type.vel
     
     def inference(self)->None:
         self.rt605.run_HRSS_intp()
@@ -280,7 +282,7 @@ class Intp():
 
         return phase_shift
     
-    def run(self, tune_mode: ServoGain, k_min:float, k_max:float, feature_type: FeatureType=FeatureType.magnitude_deviation):
+    def tune_gain(self, tune_mode: ServoGain, k_min:float, k_max:float, feature_type: FeatureType=FeatureType.magnitude_deviation):
         self.tune_mode = tune_mode
         self.max_gain = k_max
         self.min_gain = k_min
@@ -315,7 +317,6 @@ class Intp():
 
         self.print_gain(iter=1)
 
-        # Start lagrange interpolation
         if self.feature_type == FeatureType.magnitude_deviation:
             self.magnitude_deviation.append(self.compute_magnitude_deviation())
         else:
@@ -392,8 +393,88 @@ class Intp():
             elif self.feature_type == FeatureType.phase_shift:
                 self.tuned_history["Kvi"]["phase shift"] = self.phase_shift
 
+    def tune_loop(self, tune_loop: Loop_Type, ki_min: float, ki_max: float, feature_type: FeatureType):
+        self.tune_loop_type = tune_loop
+        self.max_gain = k_max
+        self.min_gain = k_min
+        self.feature_type = feature_type
         
+        self.magnitude_deviation.append(self.compute_magnitude_deviation())
+        self.phase_shift.append(self.compute_phase_shift())
+
+        self.gain.append(self.rt605.joints[self.lag_joint].get_PID(tune_mode))
+
+        self.print_gain(iter=0)
+
+        # Compute initial gain
+        if self.feature_type == FeatureType.magnitude_deviation:
+            gain_init = k_min + self.magnitude_deviation[0]*(k_max - k_min) / (self.max_magnitude_deviation - self.min_magnitude_deviation)
+        else:
+            gain_init = k_min + self.phase_shift[0]*(k_max - k_min) / (self.max_phase_shift - self.min_phase_shift)
+
+        if gain_init < k_min:
+            gain_init = k_min
+        elif gain_init > k_max:
+            gain_init = k_max
+
+        self.gain.append(gain_init)
+        self.rt605.setPID(self.lag_joint, tune_mode, gain_init)
+        self.rt605.run_HRSS_intp()
+
+        if self.feature_type == FeatureType.magnitude_deviation:
+            self.magnitude_deviation.append(self.compute_magnitude_deviation())
+        else:
+            self.phase_shift.append(self.compute_phase_shift())
+
+        self.print_gain(iter=1)
+
+        if self.feature_type == FeatureType.magnitude_deviation:
+            self.magnitude_deviation.append(self.compute_magnitude_deviation())
+        else:
+            self.phase_shift.append(self.compute_phase_shift())
+
+        self.print_gain(iter=1)
+
+        # Start lagrange interpolation
+        for iter in range(2, self.iter):
+            if self.feature_type == FeatureType.magnitude_deviation:
+                next_gain = self.lagrange_intp(self.gain, self.magnitude_deviation, k_min, k_max, 10000)
+                self.gain.append(next_gain)
+            
+                self.rt605.setPID(self.lag_joint, tune_mode, next_gain)
+                self.rt605.run_HRSS_intp()
+            
+                self.magnitude_deviation.append(self.compute_magnitude_deviation())
+            else:
+                next_gain = self.lagrange_intp(self.gain, self.phase_shift, k_min, k_max, 10000)
+                self.gain.append(next_gain)
+            
+                self.rt605.setPID(self.lag_joint, tune_mode, next_gain)
+                self.rt605.run_HRSS_intp()
+            
+                self.phase_shift.append(self.compute_phase_shift())
+            self.print_gain(iter)
+            # self.rt605.plot_joint(True)
+            if self.feature_type == FeatureType.magnitude_deviation:
+                next_gain = self.lagrange_intp(self.gain, self.magnitude_deviation, k_min, k_max, 10000)
+                self.gain.append(next_gain)
+            
+                self.rt605.setPID(self.lag_joint, tune_mode, next_gain)
+                self.rt605.run_HRSS_intp()
+            
+                self.magnitude_deviation.append(self.compute_magnitude_deviation())
+            else:
+                next_gain = self.lagrange_intp(self.gain, self.phase_shift, k_min, k_max, 10000)
+                self.gain.append(next_gain)
+            
+                self.rt605.setPID(self.lag_joint, tune_mode, next_gain)
+                self.rt605.run_HRSS_intp()
+            
+                self.phase_shift.append(self.compute_phase_shift())
+            self.print_gain(iter)
         
+    def plot3D(self):
+        pass
         
         
         
