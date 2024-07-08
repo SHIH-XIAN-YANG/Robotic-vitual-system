@@ -834,7 +834,7 @@ class RT605():
         q = np.zeros(6)
 
         
-        bandwidth = []
+        self.bandwidth = []
 
         fig, ax = plt.subplots(2, 1, figsize=(4.3, 4.1))
 
@@ -872,7 +872,7 @@ class RT605():
 
             index = np.argmax(diff < 0)
 
-            bandwidth.append(freqs[index])
+            self.bandwidth.append(freqs[index])
 
             phase = np.angle(yf / xf)
             
@@ -890,6 +890,7 @@ class RT605():
                 ax[1].grid(True)
                 ax[1].set_xlim([f0, f1])
                 ax[0].legend()
+        self.resetServoDrive()
         
         if show and fig is not None:
             plt.show()
