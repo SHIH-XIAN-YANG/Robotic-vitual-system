@@ -441,11 +441,13 @@ class Intp():
         self.tune_loop_mode = True
         self.tune_loop_type = tune_loop
         self.feature_type = feature_type
-        
-        self.magnitude_deviation.append(self.compute_magnitude_deviation())
-        self.phase_shift.append(self.compute_phase_shift())
 
-        #self.gain.append(self.rt605.joints[self.lag_joint].get_PID(tune_mode))
+        self.magnitude_deviation = [[0 for _ in range(self.iter)] for _ in range(self.iter)]
+        self.phase_shift = [[0 for _ in range(self.iter)] for _ in range(self.iter)]
+        self.bandwidth = [[0 for _ in range(self.iter)] for _ in range(self.iter)]
+
+        self.magnitude_deviation[0][0] = self.compute_magnitude_deviation()
+        self.phase_shift[0][0] = self.compute_phase_shift()
 
         self.kpp.append(self.rt605.joints[self.lag_joint].get_PID(ServoGain.Position.value.kp))
         self.kpi.append(self.rt605.joints[self.lag_joint].get_PID(ServoGain.Position.value.ki))
@@ -454,13 +456,12 @@ class Intp():
 
         self.print_gain(iter=0, tune_loop=True)
         self.rt605.sweep(show=False)
-
-        self.bandwidth.append(self.rt605.bandwidth[self.lag_joint])
+        self.bandwidth[0][0] = self.rt605.bandwidth[self.lag_joint]
 
         # Compute initial gain
         if self.feature_type == FeatureType.magnitude_deviation:
-            kp_init = kp_min + self.magnitude_deviation[0]*(kp_max - kp_min) / (self.max_magnitude_deviation - self.min_magnitude_deviation)
-            ki_init = ki_min + self.magnitude_deviation[0]*(ki_max - ki_min) / (self.max_magnitude_deviation - self.min_magnitude_deviation)
+            kp_init = kp_min + self.magnitude_deviation[0][0]*(kp_max - kp_min) / (self.max_magnitude_deviation - self.min_magnitude_deviation)
+            ki_init = ki_min + self.magnitude_deviation[0][0]*(ki_max - ki_min) / (self.max_magnitude_deviation - self.min_magnitude_deviation)
         else:
             kp_init = kp_min + self.phase_shift[0]*(kp_max - kp_min) / (self.max_phase_shift - self.min_phase_shift)
             ki_init = ki_min + self.phase_shift[0]*(ki_max - ki_min) / (self.max_phase_shift - self.min_phase_shift)
@@ -469,29 +470,66 @@ class Intp():
         ki_init = min(ki_min, min(ki_min, ki_init))
 
         if tune_loop == Loop_Type.pos:
-            self.rt605.setPID(self.lag_joint, ServoGain.Position.value.kp, kp_init)
-            self.rt605.setPID(self.lag_joint, ServoGain.Position.value.ki, ki_init)
             self.kpp.append(kp_init)
             self.kpi.append(ki_init)
+            self.rt605.setPID(self.lag_joint, ServoGain.Position.value.kp, kp_init)
+            self.rt605.run_HRSS_intp()
+            self.magnitude_deviation[0][1] = self.compute_magnitude_deviation()
+            self.rt605.sweep(show=False)
+            self.bandwidth[0][1] = self.rt605.bandwidth[self.lag_joint]
+
+            # reset to previous gain
+            self.rt605.setPID(self.lag_joint, ServoGain.Position.value.kp, self.kpp[0])
+
+            self.rt605.setPID(self.lag_joint, ServoGain.Position.value.ki, ki_init)
+            self.rt605.run_HRSS_intp()
+            self.magnitude_deviation[1][0] = self.compute_magnitude_deviation()
+            self.rt605.sweep(show=False)
+            self.bandwidth[1][0] = self.rt605.bandwidth[self.lag_joint]
+            
+            self.rt605.setPID(self.lag_joint, ServoGain.Position.value.kp, kp_init)
+            self.rt605.run_HRSS_intp()
+            self.magnitude_deviation[1][1] = self.compute_magnitude_deviation()
+            self.rt605.sweep(show=False)
+            self.bandwidth[1][1] = self.rt605.bandwidth[self.lag_joint]
+
+            
         elif tune_loop == Loop_Type.vel:
-            self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.kp, kp_init)
-            self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.ki, ki_init)
+            # self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.kp, kp_init)
+            # self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.ki, ki_init)
             self.kvp.append(kp_init)
             self.kvi.append(ki_init)
-        
-        self.rt605.run_HRSS_intp()
 
-        
+            self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.kp, kp_init)
+            self.rt605.run_HRSS_intp()
+            self.magnitude_deviation[0][1] = self.compute_magnitude_deviation()
+            self.rt605.sweep(show=False)
+            self.bandwidth[0][1] = self.rt605.bandwidth[self.lag_joint]
 
-        if self.feature_type == FeatureType.magnitude_deviation:
-            self.magnitude_deviation.append(self.compute_magnitude_deviation())
-        else:
-            self.phase_shift.append(self.compute_phase_shift())
+            # reset to previous gain
+            self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.kp, self.kpp[0])
+
+            self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.ki, ki_init)
+            self.rt605.run_HRSS_intp()
+            self.magnitude_deviation[1][0] = self.compute_magnitude_deviation()
+            self.rt605.sweep(show=False)
+            self.bandwidth[1][0] = self.rt605.bandwidth[self.lag_joint]
+            
+            self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.kp, kp_init)
+            self.rt605.run_HRSS_intp()
+            self.magnitude_deviation[1][1] = self.compute_magnitude_deviation()
+            self.rt605.sweep(show=False)
+            self.bandwidth[1][1] = self.rt605.bandwidth[self.lag_joint]
+
+        # if self.feature_type == FeatureType.magnitude_deviation:
+        #     self.magnitude_deviation.append(self.compute_magnitude_deviation())
+        # else:
+        #     self.phase_shift.append(self.compute_phase_shift())
 
         self.print_gain(iter=1, tune_loop=True)
 
-        self.rt605.sweep(show=False)
-        self.bandwidth.append(self.rt605.bandwidth[self.lag_joint])
+        # self.rt605.sweep(show=False)
+        # self.bandwidth.append(self.rt605.bandwidth[self.lag_joint])
 
         # Start lagrange interpolation
         for iter in range(2, self.iter):
@@ -503,7 +541,22 @@ class Intp():
                     self.kpi.append(ki_next)
                 
                     self.rt605.setPID(self.lag_joint, ServoGain.Position.value.kp, kp_next)
+                    for i, ki in enumerate(self.kpi):
+                        self.rt605.setPID(self.lag_joint, ServoGain.Position.value.ki, ki)
+                        self.rt605.run_HRSS_intp()
+                        self.magnitude_deviation[iter][i] = self.compute_magnitude_deviation()
+                        self.rt605.sweep(show=False)
+                        self.bandwidth[iter][i] = self.rt605.bandwidth[self.lag_joint]
+
+
                     self.rt605.setPID(self.lag_joint, ServoGain.Position.value.ki, ki_next)
+                    for i, kp in enumerate(self.kpp):
+                        self.rt605.setPID(self.lag_joint, ServoGain.Position.value.kp, kp)
+                        self.rt605.run_HRSS_intp()
+                        self.magnitude_deviation[i][iter] = self.compute_magnitude_deviation()
+                        self.rt605.sweep(show=False)
+                        self.bandwidth[i][iter] = self.rt605.bandwidth[self.lag_joint]
+
                 elif tune_loop == Loop_Type.vel:
                     kp_next, ki_next = self.lagrange_2D(self.kvp, self.kvi, self.magnitude_deviation, kp_min, kp_max, ki_min, ki_max, pointcount=10000)
 
@@ -511,11 +564,25 @@ class Intp():
                     self.kvi.append(ki_next)
                 
                     self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.kp, kp_next)
-                    self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.ki, ki_next)
+                    for i, ki in enumerate(self.kvi):
+                        self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.ki, ki)
+                        self.rt605.run_HRSS_intp()
+                        self.magnitude_deviation[iter][i] = self.compute_magnitude_deviation()
+                        self.rt605.sweep(show=False)
+                        self.bandwidth[iter][i] = self.rt605.bandwidth[self.lag_joint]
 
-                self.rt605.run_HRSS_intp()
+
+                    self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.ki, ki_next)
+                    for i, kp in enumerate(self.kvp):
+                        self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.kp, kp)
+                        self.rt605.run_HRSS_intp()
+                        self.magnitude_deviation[i][iter] = self.compute_magnitude_deviation()
+                        self.rt605.sweep(show=False)
+                        self.bandwidth[i][iter] = self.rt605.bandwidth[self.lag_joint]
+
+                # self.rt605.run_HRSS_intp()
             
-                self.magnitude_deviation.append(self.compute_magnitude_deviation())
+                # self.magnitude_deviation.append(self.compute_magnitude_deviation())
             else:
                 if tune_loop == Loop_Type.pos:
                     kp_next, ki_next = self.lagrange_2D(self.kpp, self.kpi, self.phase_shift, kp_min, kp_max, ki_min, ki_max, pointcount=10000)
@@ -524,7 +591,22 @@ class Intp():
                     self.kpi.append(ki_next)
                 
                     self.rt605.setPID(self.lag_joint, ServoGain.Position.value.kp, kp_next)
+                    for i, ki in enumerate(self.kpi):
+                        self.rt605.setPID(self.lag_joint, ServoGain.Position.value.ki, ki)
+                        self.rt605.run_HRSS_intp()
+                        self.phase_shift[iter][i] = self.compute_phase_shift()
+                        self.rt605.sweep(show=False)
+                        self.bandwidth[iter][i] = self.rt605.bandwidth[self.lag_joint]
+
+
                     self.rt605.setPID(self.lag_joint, ServoGain.Position.value.ki, ki_next)
+                    for i, kp in enumerate(self.kpp):
+                        self.rt605.setPID(self.lag_joint, ServoGain.Position.value.kp, kp)
+                        self.rt605.run_HRSS_intp()
+                        self.phase_shift[i][iter] = self.compute_phase_shift()
+                        self.rt605.sweep(show=False)
+                        self.bandwidth[i][iter] = self.rt605.bandwidth[self.lag_joint]
+
                 elif tune_loop == Loop_Type.vel:
                     kp_next, ki_next = self.lagrange_2D(self.kvp, self.kvi, self.phase_shift, kp_min, kp_max, ki_min, ki_max, pointcount=10000)
 
@@ -532,16 +614,26 @@ class Intp():
                     self.kvi.append(ki_next)
                 
                     self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.kp, kp_next)
-                    self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.ki, ki_next)
+                    for i, ki in enumerate(self.kvi):
+                        self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.ki, ki)
+                        self.rt605.run_HRSS_intp()
+                        self.phase_shift[iter][i] = self.compute_phase_shift()
+                        self.rt605.sweep(show=False)
+                        self.bandwidth[iter][i] = self.rt605.bandwidth[self.lag_joint]
 
-                self.rt605.run_HRSS_intp()
-            
-                self.phase_shift.append(self.compute_phase_shift())
+
+                    self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.ki, ki_next)
+                    for i, kp in enumerate(self.kvp):
+                        self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.kp, kp)
+                        self.rt605.run_HRSS_intp()
+                        self.phase_shift[i][iter] = self.compute_phase_shift()
+                        self.rt605.sweep(show=False)
+                        self.bandwidth[i][iter] = self.rt605.bandwidth[self.lag_joint]
 
             self.print_gain(iter, tune_loop=True)
 
-            self.rt605.sweep(show=False)
-            self.bandwidth.append(self.rt605.bandwidth[self.lag_joint])
+            # self.rt605.sweep(show=False)
+            # self.bandwidth.append(self.rt605.bandwidth[self.lag_joint])
 
         if self.tune_loop_type == Loop_Type.pos:
             self.tuned_history["Kpp"]["bandwidth"] = self.bandwidth
