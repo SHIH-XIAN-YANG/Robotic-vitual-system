@@ -60,8 +60,6 @@ class Intp():
     max_phase_shift: float
     min_phase_shift: float
 
-
-
     feature: list
     max_feature: float
     min_feature: float
@@ -158,12 +156,6 @@ class Intp():
 
         self.feature_type = None
 
-        self.tuned_history = {}
-        self.tuned_history["Kpp"] = {}
-        self.tuned_history["Kpi"] = {}
-        self.tuned_history["Kvp"] = {}
-        self.tuned_history["Kvi"] = {}
-
         self.tune_loop_type = Loop_Type.vel
         self.tune_loop_mode = False
     
@@ -177,11 +169,9 @@ class Intp():
             output = self.model(self.q_pos_err)
         
         self.lag_joint = torch.argmax(output).item()
-        print(f"Initial lag joint: {self.lag_joint}")
-
+        print(f"Lag joint: {self.lag_joint}")
     
-    
-    def lagrange_2D(self, x_data, y_data, z_data, min_x, max_x, min_y, max_y, pointcount=1000)->tuple:
+    def lagrange_2D(self, x_data, y_data, z_data, min_x:float, max_x:float, min_y:float, max_y:float, pointcount:int)->tuple:
         """
         input:
         x_data, y_data --> kp, ki
@@ -193,6 +183,7 @@ class Intp():
         return:
         optimal kp and ki
         """
+        print(f'x{len(x_data)}')
         result = 0
         min_z = np.inf
         def lagrange_basis_polynomial(x, x_points, i):
@@ -215,8 +206,8 @@ class Intp():
                         L_i = lagrange_basis_polynomial(x, x_data, i)
                         M_j = lagrange_basis_polynomial(y, y_data, j)
                         result += z_data[i][j] * L_i * M_j
-                if result < min_z:
-                    min_z = result
+                if abs(result) < min_z:
+                    min_z = abs(result)
                     opt_x = x
                     opt_y = y
 
@@ -240,7 +231,6 @@ class Intp():
                 for j in range(len(x_data)):
                     if (j != i) and (x_data[i] != x_data[j]):
                         term = term * (x - x_data[j])/(x_data[i] - x_data[j])
-                    
                 y = y + term
             if abs(y) < min_y:
                 min_y = abs(y)
@@ -284,34 +274,6 @@ class Intp():
         
     #     self.magnitude_deviation.append(self.compute_magnitude_deviation())
     #     self.phase_shift.append(self.compute_phase_shift())
-
-    def compute_magnitude_deviation(self):
-        return max(self.rt605.q_c[:, self.lag_joint]) - max(self.rt605.q[:, self.lag_joint])
-
-    def compute_phase_shift(self):
-        def find_closest_index(data, target):
-            """
-            find the closest index of trajectory's zeros crossing point
-            
-            """
-            min_diff = float('inf')
-            closest_index = -1
-
-            quarter_len = len(data) // 4
-            three_quarter_len = (len(data)*3) // 4
-
-            for idx in range(quarter_len, len(data)):
-                value = data[idx]
-                diff = abs(value - target)
-
-                if diff<min_diff:
-                    min_diff = diff
-                    closest_index = idx
-            return closest_index
-        phase_shift = self.rt605.ts * (find_closest_index(self.rt605.q[:, self.lag_joint], self.rt605.q_c[0, self.lag_joint]) \
-                                        - find_closest_index(self.rt605.q_c[:, self.lag_joint], self.rt605.q_c[0, self.lag_joint]))
-
-        return phase_shift
     
     def tune_gain(self, tune_mode: ServoGain, k_min:float, k_max:float, feature_type: FeatureType=FeatureType.magnitude_deviation):
         self.tune_mode = tune_mode
@@ -507,7 +469,7 @@ class Intp():
             self.bandwidth[0][1] = self.rt605.bandwidth[self.lag_joint]
 
             # reset to previous gain
-            self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.kp, self.kpp[0])
+            self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.kp, self.kvp[0])
 
             self.rt605.setPID(self.lag_joint, ServoGain.Velocity.value.ki, ki_init)
             self.rt605.run_HRSS_intp()
@@ -579,10 +541,6 @@ class Intp():
                         self.magnitude_deviation[i][iter] = self.compute_magnitude_deviation()
                         self.rt605.sweep(show=False)
                         self.bandwidth[i][iter] = self.rt605.bandwidth[self.lag_joint]
-
-                # self.rt605.run_HRSS_intp()
-            
-                # self.magnitude_deviation.append(self.compute_magnitude_deviation())
             else:
                 if tune_loop == Loop_Type.pos:
                     kp_next, ki_next = self.lagrange_2D(self.kpp, self.kpi, self.phase_shift, kp_min, kp_max, ki_min, ki_max, pointcount=10000)
