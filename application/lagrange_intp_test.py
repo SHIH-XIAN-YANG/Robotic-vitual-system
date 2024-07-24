@@ -835,19 +835,19 @@ def main():
     # interpolation.save_file()
 
 def tune_loop_test(kp_min, kp_max, ki_min, ki_max, feature_type: FeatureType):
-    interpolation = Intp(iter=3, pointsCount=100)
+    interpolation = Intp(iter=10, pointsCount=10000)
     interpolation.inference()
 
     interpolation.tune_loop(Loop_Type.vel, kp_min, kp_max, ki_min, ki_max, FeatureType.magnitude_deviation)
 
-    interpolation.reset_RT605()
+    # interpolation.reset_RT605()
 
-    interpolation.tune_loop(Loop_Type.pos, kp_min, kp_max, ki_min, ki_max, FeatureType.magnitude_deviation)
+    # interpolation.tune_loop(Loop_Type.pos, kp_min, kp_max, ki_min, ki_max, FeatureType.magnitude_deviation)
     
 
     #interpolation.plot3D()
 
-    interpolation.save_json_file()
+    # interpolation.save_json_file()
 
     interpolation.reset_RT605()
 
