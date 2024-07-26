@@ -1,5 +1,6 @@
 import sys
 import numpy as np
+from scipy.optimize import least_squares
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -653,7 +654,35 @@ class Intp():
             elif self.feature_type == FeatureType.phase_shift:
                 self.tuned_history["Kvp"]["phase shift"] = self.phase_shift
                 self.tuned_history["Kvi"]["phase shift"] = self.phase_shift
+    
+    def polynomial_fit(self, x_data:list, y_data:list, x_min:float, x_max:float, pointsCount:int=1000)->float:
         
+        coefficients = np.polyfit(x_data, y_data, len(x_data)-1)
+        polynomial = np.poly1d(coefficients)
+
+        # Generate x values for plotting the fitted polynomial
+        x_fit = np.linspace(x_min, x_max, pointsCount)
+        y_fit = polynomial(x_fit)
+
+        #         # Plot the original points
+        # plt.scatter(x_data, y_data, color='red', label='Original Points')
+
+        # # Plot the fitted polynomial
+        # plt.plot(x_fit, y_fit, color='blue', label=f'Fitted Polynomial: {polynomial}')
+
+        # # Add labels and title
+        # plt.xlabel('X')
+        # plt.ylabel('Y')
+        # plt.title('Polynomial Fit to Given Points')
+        # plt.legend()
+        # plt.grid(True)
+
+        # # Show the plot
+        # plt.show()
+
+        return x_fit[np.argmin(y_fit)]
+
+
         
     def plot3D(self):
         if self.tune_loop_mode==False:
