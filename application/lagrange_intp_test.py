@@ -24,7 +24,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 
 import datetime
-
+from tqdm import tqdm
 
 class FeatureType(Enum):
     magnitude_deviation = 0
@@ -201,7 +201,7 @@ class Intp():
         if plot:    
             f_points = np.zeros((self.pointsCount, self.pointsCount))
 
-        for idx_x in range(self.pointsCount):
+        for idx_x in tqdm(range(self.pointsCount)):
             x = min_x + idx_x * (max_x - min_x)/self.pointsCount
 
             for idx_y in range(self.pointsCount):
@@ -238,15 +238,16 @@ class Intp():
         
         return opt_x, opt_y, fig
 
-    def lagrange_intp(self, x_data, y_data, min_x, max_x)->float:
+    def lagrange_intp(self, x_data, y_data, min_x, max_x, pointsCount:int=1000)->float:
         opt_gain = 0.0
         min_y = np.inf
         self.max_gain = max_x
         self.min_gain = min_x
         self.max_gain = max_x
         self.min_gain = min_x
+        self.pointsCount = pointsCount
 
-        for idx in range(self.pointsCount):
+        for idx in tqdm(range(self.pointsCount)):
             x = min_x + idx * (max_x - min_x)/self.pointsCount
             y = 0.0
 
@@ -312,7 +313,7 @@ class Intp():
         self.gain.append(self.rt605.joints[self.lag_joint].get_PID(tune_mode))
 
         self.print_gain(iter=0)
-        self.rt605.sweep(show=False)
+        self.rt605.freq_response(show=False)
         self.bandwidth.append(self.rt605.bandwidth[self.lag_joint])
 
         # Compute initial gain
@@ -330,7 +331,7 @@ class Intp():
         self.rt605.setPID(self.lag_joint, tune_mode, gain_init)
         self.rt605.run_HRSS_intp()
 
-        self.rt605.sweep(show=False)
+        self.rt605.freq_response(show=False)
         self.bandwidth.append(self.rt605.bandwidth[self.lag_joint])
 
         if self.feature_type == FeatureType.magnitude_deviation:
@@ -366,7 +367,7 @@ class Intp():
             
                 self.phase_shift.append(self.compute_phase_shift())
 
-            self.rt605.sweep(show=False)
+            self.rt605.freq_response(show=False)
             self.bandwidth.append(self.rt605.bandwidth[self.lag_joint])
 
 
@@ -445,6 +446,7 @@ class Intp():
 
         self.print_gain(iter=0, tune_loop=True)
         self.rt605.sweep(show=False)
+        print(self.rt605.bandwidth[self.lag_joint])
         self.bandwidth[0][0] = self.rt605.bandwidth[self.lag_joint]
 
         # Compute initial gain
@@ -800,18 +802,21 @@ class Intp():
         self.rt605.plot_error()
         self.rt605.freq_response()
 
+    
+        
+
 def main():
-    interpolation = Intp(iter=20)
+    interpolation = Intp(iter=10)
     interpolation.inference()
 
-    interpolation.tune_gain(ServoGain.Velocity.value.ki, 0.1, 10, FeatureType.magnitude_deviation)
+    interpolation.tune_gain(ServoGain.Velocity.value.ki, 50, 150, FeatureType.magnitude_deviation)
     interpolation.reset_RT605()
 
     interpolation.tune_gain(ServoGain.Velocity.value.kp, 1, 100, FeatureType.magnitude_deviation)
     interpolation.reset_RT605()
 
-    interpolation.tune_gain(ServoGain.Position.value.ki, 0.1, 10, FeatureType.magnitude_deviation)
-    interpolation.reset_RT605()
+    # interpolation.tune_gain(ServoGain.Position.value.ki, 50, 150, FeatureType.magnitude_deviation)
+    # interpolation.reset_RT605()
 
     interpolation.tune_gain(ServoGain.Position.value.kp, 1, 100, FeatureType.magnitude_deviation)
     interpolation.save_json_file()
@@ -835,14 +840,14 @@ def main():
     # interpolation.save_file()
 
 def tune_loop_test(kp_min, kp_max, ki_min, ki_max, feature_type: FeatureType):
-    interpolation = Intp(iter=10, pointsCount=10000)
+    interpolation = Intp(iter=10, pointsCount=1000)
     interpolation.inference()
 
-    interpolation.tune_loop(Loop_Type.vel, kp_min, kp_max, ki_min, ki_max, FeatureType.magnitude_deviation)
+    # interpolation.tune_loop(Loop_Type.vel, kp_min, kp_max, ki_min, ki_max, FeatureType.magnitude_deviation)
 
     # interpolation.reset_RT605()
 
-    # interpolation.tune_loop(Loop_Type.pos, kp_min, kp_max, ki_min, ki_max, FeatureType.magnitude_deviation)
+    interpolation.tune_loop(Loop_Type.pos, kp_min, kp_max, ki_min, ki_max, FeatureType.magnitude_deviation)
     
 
     #interpolation.plot3D()
@@ -869,4 +874,9 @@ if __name__ == "__main__":
     # test(ServoGain.Velocity.value.kp, 5, 100, FeatureType.phase_shift)
     # test(ServoGain.Velocity.value.ki, 0.08, 10, FeatureType.magnitude_deviation)
     # test(ServoGain.Velocity.value.ki, 0.08, 10, FeatureType.phase_shift)
-    tune_loop_test(1,100,0.1,10,FeatureType.magnitude_deviation)
+
+
+    # tune_loop_test(1,100,50,150,FeatureType.magnitude_deviation)
+
+
+    main()
