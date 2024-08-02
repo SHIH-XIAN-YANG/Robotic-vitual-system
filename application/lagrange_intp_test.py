@@ -9,7 +9,8 @@ from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 import csv
 import json
-
+from scipy.interpolate import lagrange
+import os
 sys.path.append('..')
 #sys.path.insert(1,"../rt605")
 sys.path.append("../mismatch_classification/")
@@ -116,7 +117,7 @@ class Intp():
         self.model.eval()
 
         self.max_magnitude_deviation = 10
-        self.min_magnitude_deviation = -5
+        self.min_magnitude_deviation = 0
         self.max_phase_shift = 5
         self.min_phase_shift = -0.1
 
@@ -161,6 +162,8 @@ class Intp():
         self.tune_loop_mode = False
     
         self.pointsCount = pointsCount
+
+        
 
     def inference(self)->None:
         self.rt605.run_HRSS_intp()
@@ -342,13 +345,6 @@ class Intp():
 
         self.print_gain(iter=1)
 
-        if self.feature_type == FeatureType.magnitude_deviation:
-            self.magnitude_deviation.append(self.compute_magnitude_deviation())
-        else:
-            self.phase_shift.append(self.compute_phase_shift())
-
-        self.print_gain(iter=1)
-
         # Start lagrange interpolation
         for iter in range(2, self.iter):
             if self.feature_type == FeatureType.magnitude_deviation:
@@ -371,9 +367,10 @@ class Intp():
             self.rt605.freq_response(show=False)
             self.bandwidth.append(self.rt605.bandwidth[self.lag_joint])
 
-
-
             self.print_gain(iter)
+
+            fig_file_name = os.path.join("tune_gain_history",f'{iter}.png')
+            self.plot_lagrane_interpolation(self.gain, self.magnitude_deviation, k_min, k_max, 10000, fig_file_name)
             # # self.rt605.plot_joint(True)
             # if self.feature_type == FeatureType.magnitude_deviation:
             #     next_gain = self.lagrange_intp(self.gain, self.magnitude_deviation, k_min, k_max, 10000)
@@ -427,6 +424,8 @@ class Intp():
             elif self.feature_type == FeatureType.phase_shift:
                 self.tuned_history["Kvi"]["phase shift"] = self.phase_shift
             self.tuned_history["Kvi"]["bandwidth"] = self.bandwidth
+
+        
 
     def tune_loop(self, tune_loop: Loop_Type, kp_min: float, kp_max: float, ki_min: float, ki_max: float, feature_type: FeatureType):
         self.tune_loop_mode = True
@@ -726,6 +725,7 @@ class Intp():
     
     def reset_RT605(self):
         #self.rt605.resetPID()
+        self.bandwidth = []
         self.phase_shift = []
         self.magnitude_deviation = []
         self.features = []
@@ -825,6 +825,48 @@ class Intp():
                 for x, y in zip(self.gain, self.phase_shift):
                     csvwriter.writerow([x, y])
         print(f"Data successfully written to {save_file_path}")
+
+    def plot_lagrane_interpolation(self, x_data, y_data, min_x, max_x, pointsCount=10000, save_file_path:str=None):
+
+        # poly = lagrange(x_data, y_data)
+
+        x_interp = np.linspace(min_x, max_x, pointsCount)
+        # y_interp = poly(x_interp)
+        y_interp = np.zeros(x_interp.shape)
+
+
+        for idx in tqdm(range(self.pointsCount)):
+            # x = min_x + idx * (max_x - min_x)/self.pointsCount
+            # y = 0.0
+
+            # compute y value of polynomial(x)
+            for i in range(len(x_data)):
+                term = y_data[i]
+                for j in range(len(x_data)):
+                    if (j != i) and (x_data[i] != x_data[j]):
+                        term = term * (x_interp[idx] - x_data[j])/(x_data[i] - x_data[j])
+                y_interp[idx] = y_interp[idx] + term
+
+        plt.figure(figsize=(10, 6))
+        plt.plot(x_data, y_data, 'o', label='Original')
+        plt.plot(x_interp, y_interp, '-', label='Lagrange Interpolation')
+
+        zero_crossing_y = np.inf
+        zero_crossing_x = np.inf
+        for i, y in enumerate(y_interp):
+            if abs(y)<zero_crossing_y:
+                zero_crossing_x = x_interp[i]
+                zero_crossing_y = abs(y)
+        plt.plot(zero_crossing_x, zero_crossing_y, '*', label='solution')
+        # Add labels and title
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        plt.title('Lagrange Interpolation')
+
+        # Display the plot
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(save_file_path)
     
     def plot_result(self):
         self.rt605.plot_joint()
@@ -838,8 +880,8 @@ def main():
     interpolation = Intp(iter=10)
     interpolation.inference()
 
-    interpolation.tune_gain(ServoGain.Velocity.value.ki, 50, 150, FeatureType.magnitude_deviation)
-    interpolation.reset_RT605()
+    # interpolation.tune_gain(ServoGain.Velocity.value.ki, 50, 150, FeatureType.magnitude_deviation)
+    # interpolation.reset_RT605()
 
     interpolation.tune_gain(ServoGain.Velocity.value.kp, 1, 100, FeatureType.magnitude_deviation)
     interpolation.reset_RT605()
@@ -847,7 +889,7 @@ def main():
     # interpolation.tune_gain(ServoGain.Position.value.ki, 50, 150, FeatureType.magnitude_deviation)
     # interpolation.reset_RT605()
 
-    interpolation.tune_gain(ServoGain.Position.value.kp, 1, 100, FeatureType.magnitude_deviation)
+    # interpolation.tune_gain(ServoGain.Position.value.kp, 1, 100, FeatureType.magnitude_deviation)
     interpolation.save_json_file()
     # interpolation.reset_RT605()
 
