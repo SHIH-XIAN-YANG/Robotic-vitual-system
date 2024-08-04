@@ -148,6 +148,8 @@ class Intp():
         self.tuned_history["Kpi"] = {}
         self.tuned_history["Kvp"] = {}
         self.tuned_history["Kvi"] = {}
+        self.tuned_history["bandwidth"] = {}
+        self.tuned_history["feature"] = {}
 
         self.features = []
         self.max_feature = 2
@@ -313,7 +315,8 @@ class Intp():
         
         self.magnitude_deviation.append(self.compute_magnitude_deviation())
         self.phase_shift.append(self.compute_phase_shift())
-
+        self.rt605.freq_response(show=False)
+        self.bandwidth.append(self.rt605.bandwidth[self.lag_joint])
         self.gain.append(self.rt605.joints[self.lag_joint].get_PID(tune_mode))
 
         self.print_gain(iter=0)
@@ -370,7 +373,10 @@ class Intp():
             self.print_gain(iter)
 
             fig_file_name = os.path.join("tune_gain_history",f'{iter}.png')
-            self.plot_lagrane_interpolation(self.gain, self.magnitude_deviation, k_min, k_max, 10000, fig_file_name)
+            if self.feature_type == FeatureType.magnitude_deviation:
+                self.plot_lagrane_interpolation(self.gain, self.magnitude_deviation, k_min, k_max, 10000, fig_file_name)
+            else:
+                self.plot_lagrane_interpolation(self.gain, self.phase_shift, k_min, k_max, 10000, fig_file_name)
             # # self.rt605.plot_joint(True)
             # if self.feature_type == FeatureType.magnitude_deviation:
             #     next_gain = self.lagrange_intp(self.gain, self.magnitude_deviation, k_min, k_max, 10000)
@@ -396,6 +402,8 @@ class Intp():
             # plt.legend()
             # plt.show()
         
+
+
         if self.tune_mode == ServoGain.Position.value.kp:
             self.tuned_history["Kpp"]["gain"] = self.gain
             if self.feature_type == FeatureType.magnitude_deviation:
@@ -739,41 +747,41 @@ class Intp():
         if tune_loop:
             if self.tune_loop_type == Loop_Type.pos:
                 if self.feature_type == FeatureType.magnitude_deviation:
-                    print(f"iter: {iter} || kpp: {self.kpp[iter]}")
-                    print(f"iter: {iter} || kpi: {self.kpi[iter]}")   
+                    print(f"iter: {iter} || kpp: {self.kpp[iter]} || BW: {self.rt605.bandwidth[iter]}")
+                    print(f"iter: {iter} || kpi: {self.kpi[iter]} || BW: {self.rt605.bandwidth[iter]}")   
                     print(f'magnitude deviation:{self.magnitude_deviation}')       
                 else:
-                    print(f"iter: {iter} || kpp: {self.kpp[iter]}")
-                    print(f"iter: {iter} || kpi: {self.kpi[iter]}")
+                    print(f"iter: {iter} || kpp: {self.kpp[iter]} || BW: {self.rt605.bandwidth[iter]}")
+                    print(f"iter: {iter} || kpi: {self.kpi[iter]} || BW: {self.rt605.bandwidth[iter]}")
                     print(f'magnitude deviation:{self.phase_shift}')  
             else:
                 if self.feature_type == FeatureType.magnitude_deviation:
-                    print(f"iter: {iter} || kvp: {self.kvp[iter]}")
-                    print(f"iter: {iter} || kvi: {self.kvi[iter]}") 
+                    print(f"iter: {iter} || kvp: {self.kvp[iter]} || BW: {self.rt605.bandwidth[iter]}")
+                    print(f"iter: {iter} || kvi: {self.kvi[iter]} || BW: {self.rt605.bandwidth[iter]}") 
                     print(f'magnitude deviation:{self.magnitude_deviation}')           
                 else:
-                    print(f"iter: {iter} || kvp: {self.kvp[iter]}")
-                    print(f"iter: {iter} || kvi: {self.kvi[iter]}")
+                    print(f"iter: {iter} || kvp: {self.kvp[iter]} || BW: {self.rt605.bandwidth[iter]}")
+                    print(f"iter: {iter} || kvi: {self.kvi[iter]} || BW: {self.rt605.bandwidth[iter]}")
                     print(f'magnitude deviation:{self.phase_shift}')
         else:
             if self.feature_type == FeatureType.magnitude_deviation:
                 if self.tune_mode == ServoGain.Position.value.kp:
-                    print(f"iter: {iter} || kpp: {self.gain[iter]} || magnitude_deviation: {self.magnitude_deviation[iter]}")
+                    print(f"iter: {iter} || kpp: {self.gain[iter]} || magnitude_deviation: {self.magnitude_deviation[iter]} || BW: {self.bandwidth[iter]}")
                 elif self.tune_mode == ServoGain.Position.value.ki:
-                    print(f"iter: {iter} || kpi: {self.gain[iter]} || magnitude_deviation: {self.magnitude_deviation[iter]}")
+                    print(f"iter: {iter} || kpi: {self.gain[iter]} || magnitude_deviation: {self.magnitude_deviation[iter]} || BW: {self.bandwidth[iter]}")
                 elif self.tune_mode == ServoGain.Velocity.value.kp:
-                    print(f"iter: {iter} || kvp: {self.gain[iter]} || magnitude_deviation: {self.magnitude_deviation[iter]}")
+                    print(f"iter: {iter} || kvp: {self.gain[iter]} || magnitude_deviation: {self.magnitude_deviation[iter]} || BW: {self.bandwidth[iter]}")
                 elif self.tune_mode == ServoGain.Velocity.value.ki:
-                    print(f"iter: {iter} || kvi: {self.gain[iter]} || magnitude_deviation: {self.magnitude_deviation[iter]}")
+                    print(f"iter: {iter} || kvi: {self.gain[iter]} || magnitude_deviation: {self.magnitude_deviation[iter]} || BW: {self.bandwidth[iter]}")
             else:
                 if self.tune_mode == ServoGain.Position.value.kp:
-                    print(f"iter: {iter} || kpp: {self.gain[iter]} || phase_shift: {self.phase_shift[iter]}")
+                    print(f"iter: {iter} || kpp: {self.gain[iter]} || phase_shift: {self.phase_shift[iter]} || BW: {self.bandwidth[iter]}")
                 elif self.tune_mode == ServoGain.Position.value.ki:
-                    print(f"iter: {iter} || kpi: {self.gain[iter]} || phase_shift: {self.phase_shift[iter]}")
+                    print(f"iter: {iter} || kpi: {self.gain[iter]} || phase_shift: {self.phase_shift[iter]} || BW: {self.bandwidth[iter]}")
                 elif self.tune_mode == ServoGain.Velocity.value.kp:
-                    print(f"iter: {iter} || kvp: {self.gain[iter]} || phase_shift: {self.phase_shift[iter]}")
+                    print(f"iter: {iter} || kvp: {self.gain[iter]} || phase_shift: {self.phase_shift[iter]} || BW: {self.bandwidth[iter]}")
                 elif self.tune_mode == ServoGain.Velocity.value.ki:
-                    print(f"iter: {iter} || kvi: {self.gain[iter]} || phase_shift: {self.phase_shift[iter]}")
+                    print(f"iter: {iter} || kvi: {self.gain[iter]} || phase_shift: {self.phase_shift[iter]} || BW: {self.bandwidth[iter]}")
 
     def save_json_file(self):
         """
@@ -830,6 +838,10 @@ class Intp():
 
         # poly = lagrange(x_data, y_data)
 
+        min_x = min(x_data)
+        max_x = max(x_data)
+
+
         x_interp = np.linspace(min_x, max_x, pointsCount)
         # y_interp = poly(x_interp)
         y_interp = np.zeros(x_interp.shape)
@@ -867,6 +879,7 @@ class Intp():
         plt.legend()
         plt.grid(True)
         plt.savefig(save_file_path)
+        plt.close()
     
     def plot_result(self):
         self.rt605.plot_joint()
@@ -875,13 +888,142 @@ class Intp():
 
     
         
+    def plot_tune_history(self):
+   
+        bandwidth = []
+        kpp = None
+        kpi = None
+        kvp = None
+        kvi = None
+
+        if "phase shift" in self.tuned_history["Kvi"]:
+            kvi_feature = self.tuned_history["Kvi"]["phase shift"]
+        elif "magnitude deviation" in self.tuned_history["Kvi"]:
+            kvi_feature = self.tuned_history["Kvi"]["magnitude deviation"]
+        if "bandwidth" in self.tuned_history["Kvi"]:
+            kvi_bandwidth = self.tuned_history["Kvi"]["bandwidth"]
+            bandwidth+=(kvi_bandwidth)
+        if "gain" in self.tuned_history["Kvi"]:
+            kvi = self.tuned_history["Kvi"]["gain"]
+
+        if "phase shift" in self.tuned_history["Kvp"]:
+            kvp_feature = self.tuned_history["Kvp"]["phase shift"]
+        elif "magnitude deviation" in self.tuned_history["Kvp"]:
+            kvp_feature = self.tuned_history["Kvp"]["magnitude deviation"]
+        if "bandwidth" in self.tuned_history["Kvp"]:
+            kvp_bandwidth = self.tuned_history["Kvp"]["bandwidth"]
+            bandwidth += kvp_bandwidth
+        if "gain" in self.tuned_history["Kvp"]:
+            kvp = self.tuned_history["Kvp"]["gain"]
+
+        
+        if "phase shift" in self.tuned_history["Kpi"]:
+            kpi_feature = self.tuned_history["Kpi"]["phase shift"]
+        elif "magnitude deviation" in self.tuned_history["Kpi"]:
+            kpi_feature = self.tuned_history["Kpi"]["magnitude deviation"]
+        if "bandwidth" in self.tuned_history["Kpi"]:
+            kpi_bandwidth = self.tuned_history["Kpi"]["bandwidth"]
+            bandwidth += kpi_bandwidth
+        if "gain" in self.tuned_history["Kpi"]:
+            kpi = self.tuned_history["Kpi"]["gain"]
+
+        if "phase shift" in self.tuned_history["Kpp"]:
+            kpp_feature = self.tuned_history["Kpp"]["phase shift"]
+        elif "magnitude deviation" in self.tuned_history["Kpp"]:
+            kpp_feature = self.tuned_history["Kpp"]["magnitude deviation"]
+        if "bandwidth" in self.tuned_history["Kpp"]:
+            kpp_bandwidth = self.tuned_history["Kpp"]["bandwidth"]
+            bandwidth+=kpp_bandwidth
+        if "gain" in self.tuned_history["Kpp"]:
+            kpp = self.tuned_history["Kpp"]["gain"]
+
+         # Create subplots
+        fig, axs = plt.subplots(6, 1, figsize=(10, 20))
+        idx = 0
+        # Plot gains
+        if kvi is not None:
+            axs[idx].plot(kvi, marker='o', label='Kvi gain')
+            axs[idx].set_title('Kvi Gain')
+            axs[idx].set_xlabel('Iteration')
+            axs[idx].set_ylabel('Gain')
+            axs[idx].legend()
+            idx = idx + 1
+        
+        if kvp is not None:
+            axs[idx].plot(kvp, marker='o', label='Kvp gain')
+            axs[idx].set_title('Kvp Gain')
+            axs[idx].set_xlabel('Iteration')
+            axs[idx].set_ylabel('Gain')
+            axs[idx].legend()
+            idx = idx + 1
+            
+        if kpi is not None:
+            axs[idx].plot(kpi, marker='o', label='Kpi gain')
+            axs[idx].set_title('Kpi Gain')
+            axs[idx].set_ylabel('Gain')
+            axs[idx].legend()
+            idx = idx + 1
+
+        if kpp is not None:
+            axs[idx].plot(kpp, marker='o', label='Kpp gain')
+            axs[idx].set_title('Kpp Gain')
+            axs[idx].set_ylabel('Gain')
+            axs[idx].legend()
+            idx = idx + 1
+
+        # Plot bandwidth
+        axs[idx].plot(bandwidth, marker='o', label='Bandwidth')
+        axs[idx].set_title('Bandwidth')
+        axs[idx].set_ylabel('Bandwidth')
+        axs[idx].legend()
+        idx = idx + 1
+
+        # Plot features (if they exist)
+        if kpp_feature is not None:
+            axs[idx].plot(kpp_feature, marker='o', label='Kpp Feature')
+            axs[idx].legend()
+            idx = idx + 1
+        if kpi_feature is not None:
+            axs[idx].plot(kpi_feature, marker='x', label='Kpi Feature')
+            axs[idx].legend()
+            idx = idx + 1
+        if kvp_feature is not None:
+            axs[idx].plot(kvp_feature, marker='s', label='Kvp Feature')
+            axs[idx].legend()
+            idx = idx + 1
+        if kvi_feature is not None:
+            axs[idx].plot(kvi_feature, marker='^', label='Kvi Feature')
+            axs[idx].legend()
+            idx = idx + 1
+        
+        # axs[idx].set_title('Features')
+        # axs[idx].set_ylabel('Feature Value')
+        
+        
+
+        # Adjust layout for better readability
+        plt.tight_layout()
+        
+
+        plt.plot(bandwidth)
+        plt.xlabel('iterations')
+        plt.ylabel('bandwidth')
+        plt.title('Tune History - Bandwidth')
+        plt.grid(True)
+
+        # Show the plots
+        plt.show()
+
+
+
+
 
 def main():
     interpolation = Intp(iter=10)
     interpolation.inference()
 
-    # interpolation.tune_gain(ServoGain.Velocity.value.ki, 50, 150, FeatureType.magnitude_deviation)
-    # interpolation.reset_RT605()
+    interpolation.tune_gain(ServoGain.Velocity.value.ki, 50, 150, FeatureType.magnitude_deviation)
+    interpolation.reset_RT605()
 
     interpolation.tune_gain(ServoGain.Velocity.value.kp, 1, 100, FeatureType.magnitude_deviation)
     interpolation.reset_RT605()
@@ -889,9 +1031,11 @@ def main():
     # interpolation.tune_gain(ServoGain.Position.value.ki, 50, 150, FeatureType.magnitude_deviation)
     # interpolation.reset_RT605()
 
-    # interpolation.tune_gain(ServoGain.Position.value.kp, 1, 100, FeatureType.magnitude_deviation)
+    interpolation.tune_gain(ServoGain.Position.value.kp, 1, 100, FeatureType.magnitude_deviation)
     interpolation.save_json_file()
-    # interpolation.reset_RT605()
+    interpolation.reset_RT605()
+
+    interpolation.plot_tune_history()
 
     # for iter in range(0, 1):
     
