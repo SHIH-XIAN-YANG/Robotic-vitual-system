@@ -434,7 +434,7 @@ class RT605():
 
     def plot_error(self, show=True):
         t = np.array(range(0,self.arr_size))*self.ts
-        fig,ax = plt.subplots(3,2)
+        fig,ax = plt.subplots(6,1)
 
         # Set the same scale for each axis
         max_range = np.array([self.q_pos_err[:,0].max()-self.q_pos_err[:,0].min(), 
@@ -452,17 +452,25 @@ class RT605():
 
         mod_q_err = (mid_q1_err,mid_q2_err,mid_q3_err,mid_q4_err,mid_q5_err,mid_q6_err)
         
+        # for i in range(6):
+        #     ax[i//2,i%2].set_title(f"joint{i+1}")
+        #     ax[i//2,i%2].plot(t,self.q_pos_err[:,i])
+        #     ax[i//2,i%2].grid(True)
+        #     ax[i//2,i%2].set_ylim(mod_q_err[i] - 1.1 * max_range, mod_q_err[i]  + 1.1 * max_range)
+        #     ax[i//2,i%2].set_xlabel("time(s)")
+        #     ax[i//2,i%2].set_ylabel(r"$\theta$(deg)")    
         for i in range(6):
-            ax[i//2,i%2].set_title(f"joint{i+1}")
-            ax[i//2,i%2].plot(t,self.q_pos_err[:,i])
-            ax[i//2,i%2].grid(True)
-            ax[i//2,i%2].set_ylim(mod_q_err[i] - 1.1 * max_range, mod_q_err[i]  + 1.1 * max_range)
-            ax[i//2,i%2].set_xlabel("time(s)")
-            ax[i//2,i%2].set_ylabel(r"$\theta$(deg)")    
+            # ax[i].set_title(f"joint{i+1}")
+            ax[i].plot(t,self.q_pos_err[:,i])
+            ax[i].grid(True)
+            ax[i].set_ylim(mod_q_err[i] - 1.1 * max_range, mod_q_err[i]  + 1.1 * max_range)
+            ax[5].set_xlabel("time(s)")
+            ax[i].set_ylabel(r"$\theta$(deg)") 
+
 
 
         plt.suptitle('Joint angle error')
-        plt.tight_layout()
+        plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=0.1)
 
         if show:
             plt.show()

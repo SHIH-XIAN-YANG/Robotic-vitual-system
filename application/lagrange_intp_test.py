@@ -900,6 +900,8 @@ class Intp():
             kvi_feature = self.tuned_history["Kvi"]["phase shift"]
         elif "magnitude deviation" in self.tuned_history["Kvi"]:
             kvi_feature = self.tuned_history["Kvi"]["magnitude deviation"]
+        else:
+            kvi_feature = None
         if "bandwidth" in self.tuned_history["Kvi"]:
             kvi_bandwidth = self.tuned_history["Kvi"]["bandwidth"]
             bandwidth+=(kvi_bandwidth)
@@ -910,6 +912,8 @@ class Intp():
             kvp_feature = self.tuned_history["Kvp"]["phase shift"]
         elif "magnitude deviation" in self.tuned_history["Kvp"]:
             kvp_feature = self.tuned_history["Kvp"]["magnitude deviation"]
+        else:
+            kvp_feature = None
         if "bandwidth" in self.tuned_history["Kvp"]:
             kvp_bandwidth = self.tuned_history["Kvp"]["bandwidth"]
             bandwidth += kvp_bandwidth
@@ -921,6 +925,8 @@ class Intp():
             kpi_feature = self.tuned_history["Kpi"]["phase shift"]
         elif "magnitude deviation" in self.tuned_history["Kpi"]:
             kpi_feature = self.tuned_history["Kpi"]["magnitude deviation"]
+        else:
+            kpi_feature = None
         if "bandwidth" in self.tuned_history["Kpi"]:
             kpi_bandwidth = self.tuned_history["Kpi"]["bandwidth"]
             bandwidth += kpi_bandwidth
@@ -931,6 +937,8 @@ class Intp():
             kpp_feature = self.tuned_history["Kpp"]["phase shift"]
         elif "magnitude deviation" in self.tuned_history["Kpp"]:
             kpp_feature = self.tuned_history["Kpp"]["magnitude deviation"]
+        else:
+            kpp_feature = None
         if "bandwidth" in self.tuned_history["Kpp"]:
             kpp_bandwidth = self.tuned_history["Kpp"]["bandwidth"]
             bandwidth+=kpp_bandwidth
@@ -938,7 +946,7 @@ class Intp():
             kpp = self.tuned_history["Kpp"]["gain"]
 
          # Create subplots
-        fig, axs = plt.subplots(6, 1, figsize=(10, 20))
+        fig, axs = plt.subplots(9, 1, figsize=(10, 20))
         idx = 0
         # Plot gains
         if kvi is not None:
@@ -1019,19 +1027,19 @@ class Intp():
 
 
 def main():
-    interpolation = Intp(iter=10)
+    interpolation = Intp(iter=8)
     interpolation.inference()
 
     interpolation.tune_gain(ServoGain.Velocity.value.ki, 50, 150, FeatureType.magnitude_deviation)
     interpolation.reset_RT605()
 
-    interpolation.tune_gain(ServoGain.Velocity.value.kp, 1, 100, FeatureType.magnitude_deviation)
+    interpolation.tune_gain(ServoGain.Velocity.value.kp, 5, 150, FeatureType.magnitude_deviation)
     interpolation.reset_RT605()
 
     # interpolation.tune_gain(ServoGain.Position.value.ki, 50, 150, FeatureType.magnitude_deviation)
     # interpolation.reset_RT605()
 
-    interpolation.tune_gain(ServoGain.Position.value.kp, 1, 100, FeatureType.magnitude_deviation)
+    interpolation.tune_gain(ServoGain.Position.value.kp, 5, 150, FeatureType.magnitude_deviation)
     interpolation.save_json_file()
     interpolation.reset_RT605()
 
