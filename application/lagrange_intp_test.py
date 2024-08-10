@@ -98,6 +98,8 @@ class Intp():
     tune_loop_mode: bool
     tune_loop_type: Loop_Type
 
+    num_of_test: int
+
     def __init__(self, iter:int=10, pointsCount:int=1000):
         self.rt605 = RT605()
         self.trajectory_path = "../data/Path/"+"sine_f6_full_joints.txt"
@@ -109,12 +111,7 @@ class Intp():
 
         # Run model inference: get the initial lag joints values
         # Initial mismatch classification model
-        self.model_weight_path = '6_12_17_23_best_model_acc_95.875.pth'
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        print(self.device)
-        self.model = CNN1D(input_dim=6, output_dim=6).to(self.device)
-        self.model.load_state_dict(torch.load(self.model_weight_path))
-        self.model.eval()
+        
 
         self.max_magnitude_deviation = 10
         self.min_magnitude_deviation = 0
@@ -144,12 +141,14 @@ class Intp():
         self.feature_type = None
 
         self.tuned_history = {}
+        self.tuned_history["iterations"] = {}
         self.tuned_history["Kpp"] = {}
         self.tuned_history["Kpi"] = {}
         self.tuned_history["Kvp"] = {}
         self.tuned_history["Kvi"] = {}
         self.tuned_history["bandwidth"] = {}
         self.tuned_history["feature"] = {}
+        self.tuned_history["iter"] = 0
 
         self.features = []
         self.max_feature = 2
@@ -165,19 +164,33 @@ class Intp():
     
         self.pointsCount = pointsCount
 
+        self.num_of_test = 0
+
         
 
     def inference(self)->None:
+        
         self.rt605.run_HRSS_intp()
-        self.q_pos_err = torch.from_numpy(self.rt605.q_pos_err).float()
-        self.q_pos_err = self.q_pos_err.permute(1, 0).unsqueeze(0)
-        self.q_pos_err = self.q_pos_err.to(self.device)
+        input_data = self.rt605.q_pos_err
+
+
+        input_data = torch.from_numpy(input_data).float()
+        input_data = input_data.permute(1, 0).unsqueeze(0)
+        self.model_weight_path = '6_12_17_23_best_model_acc_95.875.pth'
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        print(self.device)
+        input_shape = input_data.shape[1]
+        self.model = CNN1D(input_dim=input_shape, output_dim=6).to(self.device)
+        self.model.load_state_dict(torch.load(self.model_weight_path))
+        self.model.eval()
+        input_data = input_data.to(self.device)
 
         with torch.no_grad():
-            output = self.model(self.q_pos_err)
+            output = self.model(input_data)
         
         self.lag_joint = torch.argmax(output).item()
         print(f"Lag joint: {self.lag_joint}")
+        self.rt605.plot_error()
     
     def lagrange_2D(self, x_data, y_data, z_data, min_x:float, max_x:float, min_y:float, max_y:float, plot=False)->tuple:
         """
@@ -691,7 +704,26 @@ class Intp():
 
         return x_fit[np.argmin(y_fit)]
 
+    # def tuner(self, iteration=6):
+    #     interpolation = Intp(iter=8)
+    #     tune_history = {}
+    #     for iter in range(iteration):
+    #         interpolation.inference()
 
+    #         interpolation.tune_gain(ServoGain.Velocity.value.ki, 0.1, 200, FeatureType.magnitude_deviation)
+    #         interpolation.reset_RT605()
+
+    #         interpolation.tune_gain(ServoGain.Velocity.value.kp, 5, 100, FeatureType.magnitude_deviation)
+    #         interpolation.reset_RT605()
+
+    #         interpolation.tune_gain(ServoGain.Position.value.kp, 5, 150, FeatureType.phase_shift)
+    #         interpolation.reset_RT605()
+
+            
+    #         tune_history[f"iter{iter}"]=interpolation.tuned_history
+    #         tune_history[f"iter{iter}"]["iter"] = iter
+
+    #     interpolation.save_json_file()
         
     def plot3D(self):
         if self.tune_loop_mode==False:
@@ -1022,24 +1054,20 @@ class Intp():
         # Show the plots
         plt.show()
 
-
-
-
-
 def main():
     interpolation = Intp(iter=8)
     interpolation.inference()
 
-    interpolation.tune_gain(ServoGain.Velocity.value.ki, 50, 150, FeatureType.magnitude_deviation)
+    interpolation.tune_gain(ServoGain.Velocity.value.ki, 0.1, 200, FeatureType.magnitude_deviation)
     interpolation.reset_RT605()
 
-    interpolation.tune_gain(ServoGain.Velocity.value.kp, 5, 150, FeatureType.magnitude_deviation)
+    interpolation.tune_gain(ServoGain.Velocity.value.kp, 5, 100, FeatureType.magnitude_deviation)
     interpolation.reset_RT605()
 
     # interpolation.tune_gain(ServoGain.Position.value.ki, 50, 150, FeatureType.magnitude_deviation)
     # interpolation.reset_RT605()
 
-    interpolation.tune_gain(ServoGain.Position.value.kp, 5, 150, FeatureType.magnitude_deviation)
+    interpolation.tune_gain(ServoGain.Position.value.kp, 5, 150, FeatureType.phase_shift)
     interpolation.save_json_file()
     interpolation.reset_RT605()
 
@@ -1080,12 +1108,28 @@ def tune_loop_test(kp_min, kp_max, ki_min, ki_max, feature_type: FeatureType):
     interpolation.reset_RT605()
 
 
-def test(tune_mode:ServoGain, min, max, feature_type:FeatureType):
-    interpolation = Intp(iter=10, pointsCount=100)
-    interpolation.inference()
+def test(iteration=6):
+    interpolation = Intp(iter=8)
+    tune_history = {}
+    for iter in range(iteration):
+        interpolation.inference()
 
-    interpolation.run(tune_mode, min, max, feature_type)
-    interpolation.save_csv_file()
+        interpolation.tune_gain(ServoGain.Velocity.value.ki, 0.1, 200, FeatureType.magnitude_deviation)
+        interpolation.reset_RT605()
+
+        interpolation.tune_gain(ServoGain.Velocity.value.kp, 5, 100, FeatureType.magnitude_deviation)
+        interpolation.reset_RT605()
+
+        interpolation.tune_gain(ServoGain.Position.value.kp, 5, 150, FeatureType.phase_shift)
+        interpolation.reset_RT605()
+
+        tune_history[f"iter{iter}"] = {}
+        tune_history[f"iter{iter}"]["tune history"]=interpolation.tuned_history
+        tune_history[f"iter{iter}"]["iter"] = iter
+        tune_history[f"iter{iter}"]["lag joint"]=interpolation.lag_joint
+
+    interpolation.save_json_file()
+
 
 
 if __name__ == "__main__":
@@ -1102,4 +1146,4 @@ if __name__ == "__main__":
     # tune_loop_test(1,100,50,150,FeatureType.magnitude_deviation)
 
 
-    main()
+    test()
