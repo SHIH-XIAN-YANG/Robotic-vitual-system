@@ -190,7 +190,7 @@ class Intp():
         
         self.lag_joint = torch.argmax(output).item()
         print(f"Lag joint: {self.lag_joint}")
-        self.rt605.plot_error()
+        # self.rt605.plot_error()
     
     def lagrange_2D(self, x_data, y_data, z_data, min_x:float, max_x:float, min_y:float, max_y:float, plot=False)->tuple:
         """
