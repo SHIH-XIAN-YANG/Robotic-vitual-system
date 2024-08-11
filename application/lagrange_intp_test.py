@@ -27,6 +27,7 @@ from matplotlib import cm
 
 import datetime
 from tqdm import tqdm
+import copy
 
 class FeatureType(Enum):
     magnitude_deviation = 0
@@ -100,6 +101,9 @@ class Intp():
 
     num_of_test: int
 
+    tracking_err_before: list
+    tracking_err_after: list
+
     def __init__(self, iter:int=10, pointsCount:int=1000):
         self.rt605 = RT605()
         self.trajectory_path = "../data/Path/"+"sine_f6_full_joints.txt"
@@ -146,9 +150,7 @@ class Intp():
         self.tuned_history["Kpi"] = {}
         self.tuned_history["Kvp"] = {}
         self.tuned_history["Kvi"] = {}
-        self.tuned_history["bandwidth"] = {}
-        self.tuned_history["feature"] = {}
-        self.tuned_history["iter"] = 0
+
 
         self.features = []
         self.max_feature = 2
@@ -166,13 +168,15 @@ class Intp():
 
         self.num_of_test = 0
 
+
+
         
 
     def inference(self)->None:
         
         self.rt605.run_HRSS_intp()
         input_data = self.rt605.q_pos_err
-
+        temp = [3,4,1,2,5,0]
 
         input_data = torch.from_numpy(input_data).float()
         input_data = input_data.permute(1, 0).unsqueeze(0)
@@ -189,6 +193,8 @@ class Intp():
             output = self.model(input_data)
         
         self.lag_joint = torch.argmax(output).item()
+        self.lag_joint = temp[self.num_of_test]
+        self.num_of_test = self.num_of_test+1
         print(f"Lag joint: {self.lag_joint}")
         # self.rt605.plot_error()
     
@@ -325,7 +331,7 @@ class Intp():
         self.max_gain = k_max
         self.min_gain = k_min
         self.feature_type = feature_type
-        
+        print(f"lag joint: {self.lag_joint}")
         self.magnitude_deviation.append(self.compute_magnitude_deviation())
         self.phase_shift.append(self.compute_phase_shift())
         self.rt605.freq_response(show=False)
@@ -815,7 +821,7 @@ class Intp():
                 elif self.tune_mode == ServoGain.Velocity.value.ki:
                     print(f"iter: {iter} || kvi: {self.gain[iter]} || phase_shift: {self.phase_shift[iter]} || BW: {self.bandwidth[iter]}")
 
-    def save_json_file(self):
+    def save_json_file(self, tune_history:dict=None):
         """
         save Kpp, Kpi, Kvp, Kvi to json file
         """
@@ -827,7 +833,10 @@ class Intp():
         
         # Writing the dictionary to a JSON file
         with open(save_file_path, 'w') as json_file:
-            json.dump(self.tuned_history, json_file, indent=4)
+            if(tune_history is not None):
+                json.dump(tune_history, json_file, indent=4)
+            else:
+                json.dump(self.tuned_history, json_file, indent=4)
 
         print(f"Data successfully written to {save_file_path}")
     
@@ -1055,19 +1064,20 @@ class Intp():
         plt.show()
 
 def main():
-    interpolation = Intp(iter=8)
-    interpolation.inference()
+    interpolation = Intp(iter=12)
+    # interpolation.inference()
+    interpolation.lag_joint = 4
 
-    interpolation.tune_gain(ServoGain.Velocity.value.ki, 0.1, 200, FeatureType.magnitude_deviation)
+    interpolation.tune_gain(ServoGain.Velocity.value.ki, 0.1, 200, FeatureType.phase_shift)
     interpolation.reset_RT605()
 
-    interpolation.tune_gain(ServoGain.Velocity.value.kp, 5, 100, FeatureType.magnitude_deviation)
+    interpolation.tune_gain(ServoGain.Velocity.value.kp, 5, 100, FeatureType.phase_shift)
     interpolation.reset_RT605()
 
     # interpolation.tune_gain(ServoGain.Position.value.ki, 50, 150, FeatureType.magnitude_deviation)
     # interpolation.reset_RT605()
 
-    interpolation.tune_gain(ServoGain.Position.value.kp, 5, 150, FeatureType.phase_shift)
+    interpolation.tune_gain(ServoGain.Position.value.kp, 5, 150, FeatureType.magnitude_deviation)
     interpolation.save_json_file()
     interpolation.reset_RT605()
 
@@ -1093,6 +1103,7 @@ def main():
 def tune_loop_test(kp_min, kp_max, ki_min, ki_max, feature_type: FeatureType):
     interpolation = Intp(iter=10, pointsCount=1000)
     interpolation.inference()
+    
 
     # interpolation.tune_loop(Loop_Type.vel, kp_min, kp_max, ki_min, ki_max, FeatureType.magnitude_deviation)
 
@@ -1109,10 +1120,59 @@ def tune_loop_test(kp_min, kp_max, ki_min, ki_max, feature_type: FeatureType):
 
 
 def test(iteration=6):
-    interpolation = Intp(iter=8)
+    
+    interpolation = Intp(iter=10)
     tune_history = {}
-    for iter in range(iteration):
+    
+    interpolation.rt605.run_HRSS_intp()
+    interpolation.rt605.plot_joint()
+    interpolation.rt605.freq_response()
+    interpolation.rt605.plot_error()
+    tracking_err_before = copy.deepcopy(interpolation.rt605.q_pos_err)
+    iterations = [8,11,8,8,8,8] 
+    t = np.array(range(0,interpolation.rt605.arr_size))*interpolation.rt605.ts
+    fig,ax = plt.subplots(6,1)
+
+    # Set the same scale for each axis
+    max_range = np.array([tracking_err_before[:,0].max()-tracking_err_before[:,0].min(), 
+                        tracking_err_before[:,1].max()-tracking_err_before[:,1].min(),
+                        tracking_err_before[:,2].max()-tracking_err_before[:,2].min(),
+                        tracking_err_before[:,3].max()-tracking_err_before[:,3].min(),
+                        tracking_err_before[:,4].max()-tracking_err_before[:,4].min(),
+                        tracking_err_before[:,5].max()-tracking_err_before[:,5].min()]).max() / 2.0
+    mid_q1_err = (tracking_err_before[:,0].max()+tracking_err_before[:,0].min()) * 0.5 
+    mid_q2_err = (tracking_err_before[:,1].max()+tracking_err_before[:,1].min()) * 0.5 
+    mid_q3_err = (tracking_err_before[:,2].max()+tracking_err_before[:,2].min()) * 0.5
+    mid_q4_err = (tracking_err_before[:,3].max()+tracking_err_before[:,3].min()) * 0.5 
+    mid_q5_err = (tracking_err_before[:,4].max()+tracking_err_before[:,4].min()) * 0.5 
+    mid_q6_err = (tracking_err_before[:,5].max()+tracking_err_before[:,5].min()) * 0.5
+
+    mod_q_err = (mid_q1_err,mid_q2_err,mid_q3_err,mid_q4_err,mid_q5_err,mid_q6_err)
+    
+    # for i in range(6):
+    #     ax[i//2,i%2].set_title(f"joint{i+1}")
+    #     ax[i//2,i%2].plot(t,self.q_pos_err[:,i])
+    #     ax[i//2,i%2].grid(True)
+    #     ax[i//2,i%2].set_ylim(mod_q_err[i] - 1.1 * max_range, mod_q_err[i]  + 1.1 * max_range)
+    #     ax[i//2,i%2].set_xlabel("time(s)")
+    #     ax[i//2,i%2].set_ylabel(r"$\theta$(deg)")    
+    for i in range(6):
+        # ax[i].set_title(f"joint{i+1}")
+        ax[i].plot(t,tracking_err_before[:,i], label='original')
+        # ax[i].plot(t,tracking_err_after[:,i], label='tuned')
+        ax[i].grid(True)
+        ax[i].set_ylim(mod_q_err[i] - 1.1 * max_range, mod_q_err[i]  + 1.1 * max_range)
+        ax[5].set_xlabel("time(s)")
+        ax[i].set_ylabel(r"$\theta$(deg)") 
+
+
+
+    plt.suptitle('Joint angle error')
+    plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=0.1)
+    plt.show()
+    for iter in range(6):
         interpolation.inference()
+        interpolation.iter = iterations[iter]
 
         interpolation.tune_gain(ServoGain.Velocity.value.ki, 0.1, 200, FeatureType.magnitude_deviation)
         interpolation.reset_RT605()
@@ -1124,11 +1184,64 @@ def test(iteration=6):
         interpolation.reset_RT605()
 
         tune_history[f"iter{iter}"] = {}
-        tune_history[f"iter{iter}"]["tune history"]=interpolation.tuned_history
+        tune_history[f"iter{iter}"]["tune history"]=copy.deepcopy(interpolation.tuned_history)
         tune_history[f"iter{iter}"]["iter"] = iter
         tune_history[f"iter{iter}"]["lag joint"]=interpolation.lag_joint
+        tune_history[f"iter{iter}"]["Bandwidth"]=interpolation.rt605.bandwidth
+        print(tune_history)
+        interpolation.tuned_history.clear()
+        interpolation.tuned_history["iterations"] = {}
+        interpolation.tuned_history["Kpp"] = {}
+        interpolation.tuned_history["Kpi"] = {}
+        interpolation.tuned_history["Kvp"] = {}
+        interpolation.tuned_history["Kvi"] = {}
+    tracking_err_after = copy.deepcopy(interpolation.rt605.q_pos_err)
+    interpolation.rt605.run_HRSS_intp()
+    interpolation.rt605.plot_joint()
+    interpolation.rt605.freq_response()
+    interpolation.rt605.plot_error()
+    interpolation.save_json_file(tune_history)
 
-    interpolation.save_json_file()
+    t = np.array(range(0,interpolation.rt605.arr_size))*interpolation.rt605.ts
+    fig,ax = plt.subplots(6,1)
+
+    # Set the same scale for each axis
+    max_range = np.array([tracking_err_before[:,0].max()-tracking_err_before[:,0].min(), 
+                        tracking_err_before[:,1].max()-tracking_err_before[:,1].min(),
+                        tracking_err_before[:,2].max()-tracking_err_before[:,2].min(),
+                        tracking_err_before[:,3].max()-tracking_err_before[:,3].min(),
+                        tracking_err_before[:,4].max()-tracking_err_before[:,4].min(),
+                        tracking_err_before[:,5].max()-tracking_err_before[:,5].min()]).max() / 2.0
+    mid_q1_err = (tracking_err_before[:,0].max()+tracking_err_before[:,0].min()) * 0.5 
+    mid_q2_err = (tracking_err_before[:,1].max()+tracking_err_before[:,1].min()) * 0.5 
+    mid_q3_err = (tracking_err_before[:,2].max()+tracking_err_before[:,2].min()) * 0.5
+    mid_q4_err = (tracking_err_before[:,3].max()+tracking_err_before[:,3].min()) * 0.5 
+    mid_q5_err = (tracking_err_before[:,4].max()+tracking_err_before[:,4].min()) * 0.5 
+    mid_q6_err = (tracking_err_before[:,5].max()+tracking_err_before[:,5].min()) * 0.5
+
+    mod_q_err = (mid_q1_err,mid_q2_err,mid_q3_err,mid_q4_err,mid_q5_err,mid_q6_err)
+    
+    # for i in range(6):
+    #     ax[i//2,i%2].set_title(f"joint{i+1}")
+    #     ax[i//2,i%2].plot(t,self.q_pos_err[:,i])
+    #     ax[i//2,i%2].grid(True)
+    #     ax[i//2,i%2].set_ylim(mod_q_err[i] - 1.1 * max_range, mod_q_err[i]  + 1.1 * max_range)
+    #     ax[i//2,i%2].set_xlabel("time(s)")
+    #     ax[i//2,i%2].set_ylabel(r"$\theta$(deg)")    
+    for i in range(6):
+        # ax[i].set_title(f"joint{i+1}")
+        ax[i].plot(t,tracking_err_before[:,i], label='original')
+        ax[i].plot(t,tracking_err_after[:,i], label='tuned')
+        ax[i].grid(True)
+        ax[i].set_ylim(mod_q_err[i] - 1.1 * max_range, mod_q_err[i]  + 1.1 * max_range)
+        ax[5].set_xlabel("time(s)")
+        ax[i].set_ylabel(r"$\theta$(deg)") 
+
+
+
+    plt.suptitle('Joint angle error')
+    plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=0.1)
+    plt.show()
 
 
 

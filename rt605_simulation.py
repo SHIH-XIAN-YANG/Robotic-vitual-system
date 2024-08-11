@@ -79,6 +79,7 @@ def main():
     # rt605.plot_cartesian()
 
     rt605.plot_error()
+    rt605.freq_response()
     # rt605.plot_polar()
     # rt605.sweep()
 
