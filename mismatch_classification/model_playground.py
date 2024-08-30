@@ -297,6 +297,23 @@ class multi_channel_CNN(nn.Module):
         
         return x
 
+    # Define the LSTM model
+class LSTMClassifier(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size, num_layers=1):
+        super(LSTMClassifier, self).__init__()
+        self.hidden_size = hidden_size
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        self.fc = nn.Linear(hidden_size, output_size)
+    
+    def forward(self, x):
+        h_0 = torch.zeros(1, x.size(0), self.hidden_size).to(x.device)  # hidden state
+        c_0 = torch.zeros(1, x.size(0), self.hidden_size).to(x.device)  # cell state
+        
+        out, _ = self.lstm(x, (h_0, c_0))
+        out = out[:, -1, :]  # take the last output
+        out = self.fc(out)
+        return out
+
 if __name__=="__main__":
     
     # Example of parallel CNN
@@ -317,9 +334,12 @@ if __name__=="__main__":
     model = CNN1D(input_dim=6, output_dim=6)
     summary(model, input_size=(1, 6, 10568))
 
+    # LSTM example
+    model = LSTMClassifier(input_size=10568, hidden_size=128, output_size=6, num_layers=1)
+
     input_tensor = torch.randn((1, 6, 10568))  # Batch size 1, input dimension 5, sequence length 10
     output = model(input_tensor)
-    print(output.shape)  
+    print(output)  
 
     
 
