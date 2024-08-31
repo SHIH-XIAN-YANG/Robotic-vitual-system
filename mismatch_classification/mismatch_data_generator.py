@@ -65,7 +65,7 @@ arm.compute_friction.enable_friction(False) #Turn on/off friction
 
 
 #define range of PID controllers
-upper_limit = [300,300,300,100,200,150]
+upper_limit = [300,300,300,100,200,300]
 lower_limit = [50,1,1,1,1,1]
 
 connection = pymysql.connect(
@@ -94,18 +94,23 @@ sql = f"""CREATE TABLE IF NOT EXISTS {table_name} (
 cursor.execute(sql)
 connection.commit()
 
-# sql = "SELECT MAX(id)+1 AS highest_id FROM tracking_err;"
-# cursor.execute(sql)
-# id = cursor.fetchone()[0]
-# if id is None:
-#     current_id = 1
-# else:
-#     current_id = int(id)
+sql = "SELECT MAX(id)+1 AS highest_id FROM tracking_err;"
+cursor.execute(sql)
+id = cursor.fetchone()[0]
+if id is None:
+    current_id = 1
+else:
+    current_id = int(id)
 
-# print(current_id)
+print(current_id)
 
 
 for i in tqdm(range(8000)):
+
+    sql = "SELECT MAX(id)+1 AS highest_id FROM tracking_err;"
+    cursor.execute(sql)
+    current_id = cursor.fetchone()[0]
+    print(current_id)
     arm.initialize_model()
     arm.load_HRSS_trajectory(trajectory_path) 
     
@@ -177,7 +182,7 @@ for i in tqdm(range(8000)):
         # print(insert_result)
 
         connection.commit()
-        # arm.resetPID()
+        arm.resetPID()
         arm.resetServoDrive()
         # current_id = current_id + 1
         # arm.resetServoModel()

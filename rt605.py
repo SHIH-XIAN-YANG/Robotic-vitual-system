@@ -194,7 +194,7 @@ class RT605():
         self.z_center = (min(self.z_c) + max(self.z_c))/2
 
 
-        print('load data succuss')
+        # print('load data succuss')
         
 
         return self.q_c
@@ -228,6 +228,7 @@ class RT605():
     def initialize_model(self, servo_file_dir:str=None):
         # print(servo_file_dir)
         # for loop run six joint initialization
+        self.unstable_state = False
         for i in range(6):
             model_path_name = f"j{i+1}/j{i+1}.sdrv"
             if servo_file_dir==None:

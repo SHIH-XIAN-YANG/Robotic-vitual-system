@@ -274,33 +274,40 @@ class Intp():
 
         return phase_shift
     
-    def compute_features(self, feature_type: FeatureType):
+    def compute_features(self, feature_type: FeatureType=None):
+        def find_closest_index(data, target):
+            """
+            find the closest index of trajectory's zeros crossing point
+            
+            """
+            min_diff = float('inf')
+            closest_index = -1
+
+            quarter_len = len(data) // 4
+            three_quarter_len = (len(data)*3) // 4
+
+            for idx in range(quarter_len, len(data)):
+                value = data[idx]
+                diff = abs(value - target)
+
+                if diff<min_diff:
+                    min_diff = diff
+                    closest_index = idx
+            return closest_index
         if feature_type==FeatureType.magnitude:
             return max(self.rt605.q_c[:, self.lag_joint]) - max(self.rt605.q[:, self.lag_joint])
-        else:
-            def find_closest_index(data, target):
-                """
-                find the closest index of trajectory's zeros crossing point
-                
-                """
-                min_diff = float('inf')
-                closest_index = -1
-
-                quarter_len = len(data) // 4
-                three_quarter_len = (len(data)*3) // 4
-
-                for idx in range(quarter_len, len(data)):
-                    value = data[idx]
-                    diff = abs(value - target)
-
-                    if diff<min_diff:
-                        min_diff = diff
-                        closest_index = idx
-                return closest_index
+        elif feature_type==FeatureType.phase:
             phase_shift = self.rt605.ts * (find_closest_index(self.rt605.q[:, self.lag_joint], self.rt605.q_c[0, self.lag_joint]) \
                                             - find_closest_index(self.rt605.q_c[:, self.lag_joint], self.rt605.q_c[0, self.lag_joint]))
-
             return phase_shift
+        else:
+            tau = 2
+            phase_shift = self.rt605.ts * (find_closest_index(self.rt605.q[:, self.lag_joint], self.rt605.q_c[0, self.lag_joint]) \
+                                            - find_closest_index(self.rt605.q_c[:, self.lag_joint], self.rt605.q_c[0, self.lag_joint]))
+            magnitude_deviation = max(self.rt605.q_c[:, self.lag_joint]) - max(self.rt605.q[:, self.lag_joint])
+
+            return magnitude_deviation * np.exp(phase_shift/tau)
+
 
     def tune_gain(self, tune_mode: ServoGain, k_min:float, k_max:float, feature_type: FeatureType):
         self.tune_mode = tune_mode
@@ -568,42 +575,22 @@ class Intp():
     def print_gain(self,iter:int, tune_loop:bool=False):
         if tune_loop:
             if self.tune_loop_type == Loop_Type.pos:
-                if self.feature_type == FeatureType.magnitude_deviation:
-                    print(f"iter: {iter} || kpp: {self.kpp[iter]} || BW: {self.rt605.bandwidth[iter]}")
-                    print(f"iter: {iter} || kpi: {self.kpi[iter]} || BW: {self.rt605.bandwidth[iter]}")   
-                    print(f'magnitude deviation:{self.magnitude_deviation}')       
-                else:
-                    print(f"iter: {iter} || kpp: {self.kpp[iter]} || BW: {self.rt605.bandwidth[iter]}")
-                    print(f"iter: {iter} || kpi: {self.kpi[iter]} || BW: {self.rt605.bandwidth[iter]}")
-                    print(f'magnitude deviation:{self.phase_shift}')  
+                print(f"iter: {iter} || kpp: {self.kpp[iter]} || BW: {self.rt605.bandwidth[iter]}")
+                print(f"iter: {iter} || kpi: {self.kpi[iter]} || BW: {self.rt605.bandwidth[iter]}")   
+                print(f'features: {self.features}')       
             else:
-                if self.feature_type == FeatureType.magnitude_deviation:
-                    print(f"iter: {iter} || kvp: {self.kvp[iter]} || BW: {self.rt605.bandwidth[iter]}")
-                    print(f"iter: {iter} || kvi: {self.kvi[iter]} || BW: {self.rt605.bandwidth[iter]}") 
-                    print(f'magnitude deviation:{self.magnitude_deviation}')           
-                else:
-                    print(f"iter: {iter} || kvp: {self.kvp[iter]} || BW: {self.rt605.bandwidth[iter]}")
-                    print(f"iter: {iter} || kvi: {self.kvi[iter]} || BW: {self.rt605.bandwidth[iter]}")
-                    print(f'magnitude deviation:{self.phase_shift}')
+                print(f"iter: {iter} || kvp: {self.kvp[iter]} || BW: {self.rt605.bandwidth[iter]}")
+                print(f"iter: {iter} || kvi: {self.kvi[iter]} || BW: {self.rt605.bandwidth[iter]}") 
+                print(f'features: {self.features}')           
         else:
-            if self.feature_type == FeatureType.magnitude_deviation:
-                if self.tune_mode == ServoGain.Position.value.kp:
-                    print(f"iter: {iter} || kpp: {self.gain[iter]} || magnitude_deviation: {self.magnitude_deviation[iter]} || BW: {self.bandwidth[iter]}")
-                elif self.tune_mode == ServoGain.Position.value.ki:
-                    print(f"iter: {iter} || kpi: {self.gain[iter]} || magnitude_deviation: {self.magnitude_deviation[iter]} || BW: {self.bandwidth[iter]}")
-                elif self.tune_mode == ServoGain.Velocity.value.kp:
-                    print(f"iter: {iter} || kvp: {self.gain[iter]} || magnitude_deviation: {self.magnitude_deviation[iter]} || BW: {self.bandwidth[iter]}")
-                elif self.tune_mode == ServoGain.Velocity.value.ki:
-                    print(f"iter: {iter} || kvi: {self.gain[iter]} || magnitude_deviation: {self.magnitude_deviation[iter]} || BW: {self.bandwidth[iter]}")
-            else:
-                if self.tune_mode == ServoGain.Position.value.kp:
-                    print(f"iter: {iter} || kpp: {self.gain[iter]} || phase_shift: {self.phase_shift[iter]} || BW: {self.bandwidth[iter]}")
-                elif self.tune_mode == ServoGain.Position.value.ki:
-                    print(f"iter: {iter} || kpi: {self.gain[iter]} || phase_shift: {self.phase_shift[iter]} || BW: {self.bandwidth[iter]}")
-                elif self.tune_mode == ServoGain.Velocity.value.kp:
-                    print(f"iter: {iter} || kvp: {self.gain[iter]} || phase_shift: {self.phase_shift[iter]} || BW: {self.bandwidth[iter]}")
-                elif self.tune_mode == ServoGain.Velocity.value.ki:
-                    print(f"iter: {iter} || kvi: {self.gain[iter]} || phase_shift: {self.phase_shift[iter]} || BW: {self.bandwidth[iter]}")
+            if self.tune_mode == ServoGain.Position.value.kp:
+                print(f"iter: {iter} || kpp: {self.gain[iter]} || features: {self.features[iter]} || BW: {self.bandwidth[iter]}")
+            elif self.tune_mode == ServoGain.Position.value.ki:
+                print(f"iter: {iter} || kpi: {self.gain[iter]} || features: {self.features[iter]} || BW: {self.bandwidth[iter]}")
+            elif self.tune_mode == ServoGain.Velocity.value.kp:
+                print(f"iter: {iter} || kvp: {self.gain[iter]} || features: {self.features[iter]} || BW: {self.bandwidth[iter]}")
+            elif self.tune_mode == ServoGain.Velocity.value.ki:
+                print(f"iter: {iter} || kvi: {self.gain[iter]} || features: {self.features[iter]} || BW: {self.bandwidth[iter]}")
 
     def save_json_file(self, tune_history:dict=None):
         """
@@ -625,26 +612,14 @@ class Intp():
         print(f"Data successfully written to {save_file_path}")
     
     def save_csv_file(self):
-        if self.feature_type == FeatureType.magnitude_deviation:
-            if self.tune_mode == ServoGain.Position.value.kp:
-                save_file_path = f"kpp_iter_{self.iter}_max_{self.max_gain}_mag.csv"
-            elif self.tune_mode == ServoGain.Position.value.ki:
-                save_file_path = f"kpi_iter_{self.iter}_max_{self.max_gain}_mag.csv"
-            elif self.tune_mode == ServoGain.Velocity.value.kp:
-                save_file_path = f"kvp_iter_{self.iter}_max_{self.max_gain}_mag.csv"
-            elif self.tune_mode == ServoGain.Velocity.value.ki:
-                save_file_path = f"kvi_iter_{self.iter}_max_{self.max_gain}_mag.csv"
-        else:
-            if self.tune_mode == ServoGain.Position.value.kp:
-                save_file_path = f"kpp_iter_{self.iter}_max_{self.max_gain}_phase.csv"
-            elif self.tune_mode == ServoGain.Position.value.ki:
-                save_file_path = f"kpi_iter_{self.iter}_max_{self.max_gain}_phase.csv"
-            elif self.tune_mode == ServoGain.Velocity.value.kp:
-                save_file_path = f"kvp_iter_{self.iter}_max_{self.max_gain}_phase.csv"
-            elif self.tune_mode == ServoGain.Velocity.value.ki:
-                save_file_path = f"kvi_iter_{self.iter}_max_{self.max_gain}_phase.csv"
-
-    
+        if self.tune_mode == ServoGain.Position.value.kp:
+            save_file_path = f"kpp_iter_{self.iter}_max_{self.max_gain}.csv"
+        elif self.tune_mode == ServoGain.Position.value.ki:
+            save_file_path = f"kpi_iter_{self.iter}_max_{self.max_gain}.csv"
+        elif self.tune_mode == ServoGain.Velocity.value.kp:
+            save_file_path = f"kvp_iter_{self.iter}_max_{self.max_gain}.csv"
+        elif self.tune_mode == ServoGain.Velocity.value.ki:
+            save_file_path = f"kvi_iter_{self.iter}_max_{self.max_gain}.csv"
 
         with open(save_file_path, 'w', newline='') as csvfile:
             csvwriter = csv.writer(csvfile)
@@ -717,6 +692,8 @@ class Intp():
             kvi_feature = self.tuned_history["Kvi"]["phase shift"]
         elif "magnitude deviation" in self.tuned_history["Kvi"]:
             kvi_feature = self.tuned_history["Kvi"]["magnitude deviation"]
+        elif "features" in self.tuned_history["Kvi"]:
+            kvi_feature = self.tuned_history["Kvi"]["features"]
         else:
             kvi_feature = None
         if "bandwidth" in self.tuned_history["Kvi"]:
@@ -729,6 +706,8 @@ class Intp():
             kvp_feature = self.tuned_history["Kvp"]["phase shift"]
         elif "magnitude deviation" in self.tuned_history["Kvp"]:
             kvp_feature = self.tuned_history["Kvp"]["magnitude deviation"]
+        elif "features" in self.tuned_history["Kvi"]:
+            kvp_feature = self.tuned_history["Kvi"]["features"]
         else:
             kvp_feature = None
         if "bandwidth" in self.tuned_history["Kvp"]:
@@ -742,6 +721,8 @@ class Intp():
             kpi_feature = self.tuned_history["Kpi"]["phase shift"]
         elif "magnitude deviation" in self.tuned_history["Kpi"]:
             kpi_feature = self.tuned_history["Kpi"]["magnitude deviation"]
+        elif "features" in self.tuned_history["Kvi"]:
+            kpi_feature = self.tuned_history["Kvi"]["features"]
         else:
             kpi_feature = None
         if "bandwidth" in self.tuned_history["Kpi"]:
@@ -754,6 +735,8 @@ class Intp():
             kpp_feature = self.tuned_history["Kpp"]["phase shift"]
         elif "magnitude deviation" in self.tuned_history["Kpp"]:
             kpp_feature = self.tuned_history["Kpp"]["magnitude deviation"]
+        elif "features" in self.tuned_history["Kvi"]:
+            kpp_feature = self.tuned_history["Kvi"]["features"]
         else:
             kpp_feature = None
         if "bandwidth" in self.tuned_history["Kpp"]:
