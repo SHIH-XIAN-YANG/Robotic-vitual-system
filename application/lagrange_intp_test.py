@@ -1126,7 +1126,7 @@ def test(iteration=6):
     
     interpolation.rt605.run_HRSS_intp()
     interpolation.rt605.plot_joint()
-    interpolation.rt605.freq_response()
+    fig1 = interpolation.rt605.freq_response()
     interpolation.rt605.plot_error()
     tracking_err_before = copy.deepcopy(interpolation.rt605.q_pos_err)
     iterations = [8,11,8,8,8,8] 

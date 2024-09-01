@@ -911,7 +911,7 @@ class RT605():
         
         self.bandwidth = []
 
-        fig, ax = plt.subplots(2, 1, figsize=(4.3, 4.1))
+        fig, ax = plt.subplots(2, 1, figsize=(8, 10))
 
         for i, joint in enumerate(self.joints):
             
@@ -941,7 +941,7 @@ class RT605():
                
                 ax[0].grid(True)
                 ax[0].set_xlim([0.1, 100])
-                ax[0].legend()
+                ax[0].legend(loc='lower left', fontsize=14)
                 ax[1].semilogx(omega_interp/ (2*np.pi), phase_interp)
                 ax[1].set_xlabel('Frequency [Hz]')
                 ax[1].set_ylabel('Phase [rad]')
