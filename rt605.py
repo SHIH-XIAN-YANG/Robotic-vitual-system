@@ -192,6 +192,9 @@ class RT605():
         self.x_center = (min(self.x_c) + max(self.x_c))/2
         self.y_center = (min(self.y_c) + max(self.y_c))/2
         self.z_center = (min(self.z_c) + max(self.z_c))/2
+
+
+        # print('load data succuss')
         
 
         return self.q_c
@@ -225,6 +228,7 @@ class RT605():
     def initialize_model(self, servo_file_dir:str=None):
         # print(servo_file_dir)
         # for loop run six joint initialization
+        self.unstable_state = False
         for i in range(6):
             model_path_name = f"j{i+1}/j{i+1}.sdrv"
             if servo_file_dir==None:
@@ -318,6 +322,7 @@ class RT605():
         self.tracking_err_roll = []
         self.tracking_err_yaw = []
 
+        # print(self.q1_c)
 
         for i, q_ref in enumerate(tzip(self.q1_c,self.q2_c,self.q3_c,self.q4_c,self.q5_c,self.q6_c)):
             
