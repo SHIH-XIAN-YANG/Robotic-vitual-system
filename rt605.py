@@ -199,6 +199,76 @@ class RT605():
 
         return self.q_c
 
+    def load_RT605_INTP_trajectory(self, path_dir:str):
+        try:
+            # self.data = np.genfromtxt(self.path_file_dir+self.path_name, delimiter=',')
+            self.data = np.genfromtxt(path_dir, delimiter=',', skip_header=1)
+        except:
+            return None
+
+        # deterning if it is XY circular test or YZ circular test or line test
+        if path_dir.find("XY") !=-1:
+            self.path_mode = 0
+        elif path_dir.find("YZ") != -1:
+            self.path_mode = 1
+        elif path_dir.find("line") != -1:
+            self.path_mode = 2
+        elif path_dir.find("sine") !=-1:
+            self.path_mode = 3
+        
+        # cartesian command(mm)
+        self.x_c = self.data[:,1]
+        self.y_c = self.data[:,2]
+        self.z_c = self.data[:,3]
+
+        # cartesian command(degree)
+        self.pitch_c = self.data[:,4]  # A --> Ry
+        self.roll_c = self.data[:,5]   # B --> -Rx  the coordinate of tool frame is up-side down
+        self.yaw_c = self.data[:,6]     # C --> Rz
+
+        # joint command(degree)
+        self.q1_c = (self.data[:,7]) 
+        self.q2_c = (self.data[:,8]) 
+        self.q3_c = (self.data[:,9]) 
+        self.q4_c = (self.data[:,10]) 
+        self.q5_c = (self.data[:,11]) 
+        self.q6_c = (self.data[:,12]) 
+
+        # Concatenate the arrays into a single 2-dimensional array
+        self.q_c = np.column_stack((self.q1_c,self.q2_c,self.q3_c,
+                                    self.q4_c,self.q5_c,self.q6_c))
+        print(len(self.q1_c))
+        
+        # set Initial condition of rt605
+        for i in range(6):
+            self.joints[i].setInitial(pos_init=self.q_c[0,i])
+            # self.joints[i].motor.setInit(self.q_c[0,i]) 
+        
+        self.arr_size = self.q1_c.shape[0]
+
+        # Sampling time
+        self.time = self.ts * np.arange(0,self.arr_size)
+
+        self.q_pos_err = np.zeros((self.arr_size,6))
+        self.torque = np.zeros((self.arr_size,6))
+        self.q = np.zeros((self.arr_size, 6))
+        self.dq = np.zeros((self.arr_size, 6))
+        self.ddq = np.zeros((self.arr_size, 6))
+
+        self.x = np.zeros(self.arr_size)
+        self.y = np.zeros(self.arr_size)
+        self.z = np.zeros(self.arr_size)
+
+        self.pitch = np.zeros(self.arr_size)
+        self.roll = np.zeros(self.arr_size)
+        self.yaw = np.zeros(self.arr_size)
+
+        self.x_center = (min(self.x_c) + max(self.x_c))/2
+        self.y_center = (min(self.y_c) + max(self.y_c))/2
+        self.z_center = (min(self.z_c) + max(self.z_c))/2
+
+        return self.q_c
+
 
     def setPID(self, id, gain:ServoGain, value:np.float32)->None:
         # if gain == "kvp":
@@ -355,9 +425,9 @@ class RT605():
             self.tracking_err.append(LA.norm([self.tracking_err_x, self.tracking_err_y, self.tracking_err_z]))
 
             
-            self.contour_err.append(self.computeCountourErr(self.x[i],self.y[i],self.z[i]))
-            self.ori_contour_err.append(self.compute_ori_contour_error(self.pitch[i],self.roll[i],self.yaw[i]))
-            self.circular_err.append(self.computeCircularErr(self.x[i], self.y[i]))
+            # self.contour_err.append(self.computeCountourErr(self.x[i],self.y[i],self.z[i]))
+            # self.ori_contour_err.append(self.compute_ori_contour_error(self.pitch[i],self.roll[i],self.yaw[i]))
+            # self.circular_err.append(self.computeCircularErr(self.x[i], self.y[i]))
 
 
             current_angle = self.compute_angle(self.x[i],self.y[i],self.z[i])
@@ -812,7 +882,7 @@ class RT605():
 
         return t_err, t_err_x, t_err_y, t_err_z, t_err_pitch, t_err_roll, t_err_yaw
     
-    def sweep(self,fs=2000, f0=0.1, f1=1000, t0=0, t1=1, a0=0.1, a1=0.001, tau=0.2, show=True):
+    def sweep(self,fs=2000, f0=0.1, f1=100, t0=0, t1=5, a0=0.05, a1=0.05, tau=0.2, show=True):
         '''
         Determine the frequency response of the system:
         fs: sampling rate
@@ -831,7 +901,8 @@ class RT605():
         # Generate chirp sine signal
         amp_decay = a0 * np.exp(-t / tau)
         f = f0 + (f1 - f0) / (t1 - t0) * t
-        chirp_sine = amp_decay * np.sin(2 * np.pi * f * t)
+        # chirp_sine = amp_decay * np.sin(2 * np.pi * f * t)
+        chirp_sine = a0 * np.sin(2 * np.pi * f * t)
 
         shape = (6, 6, len(t))
 
